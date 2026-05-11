@@ -579,14 +579,29 @@ const API=(()=>{
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
   /* ── Helius helpers ── */
-  async function hPost(path,body){
+  // GET /v0/addresses/:address/transactions
+  async function hGetTxs(address,params={}){
     const k=getKeys().helius;
     if(!k)throw new Error('Helius API key not configured — open Settings.');
-    const r=await fetch(`https://api.helius.xyz/v0/${path}?api-key=${k}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
-    });
+    const u=new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
+    u.searchParams.set('api-key',k);
+    for(const[p,v]of Object.entries(params))if(v!==undefined&&v!==null)u.searchParams.set(p,String(v));
+    const r=await fetch(u.toString());
     if(!r.ok)throw new Error(`Helius ${r.status}: ${await r.text()}`);
     return r.json();
+  }
+  // Helius DAS RPC (POST to mainnet RPC endpoint)
+  async function hRpc(method,params=[]){
+    const k=getKeys().helius;
+    if(!k)throw new Error('Helius API key not configured.');
+    const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${k}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})
+    });
+    if(!r.ok)throw new Error(`Helius RPC ${r.status}: ${await r.text()}`);
+    const d=await r.json();
+    if(d.error)throw new Error(`Helius RPC error: ${d.error.message}`);
+    return d.result;
   }
 
   /* ── Moralis helpers ── */
@@ -618,12 +633,12 @@ const API=(()=>{
     let page=0;
 
     while(page<maxPages){
-      const body={options:{limit:100}};
-      if(before)body.options.before=before;
-
       let batch;
-      try{ batch=await hPost(`addresses/${address}/transactions`,body); }
-      catch(e){ console.warn('Helius page fail',e.message); break; }
+      try{
+        const params={limit:100,type:'ALL'};
+        if(before)params.before=before;
+        batch=await hGetTxs(address,params);
+      }catch(e){ console.warn('Helius page fail',e.message); break; }
 
       if(!batch||!batch.length)break;
 
@@ -744,22 +759,41 @@ const API=(()=>{
 
   /* ── Token discovery ── */
   async function solFindToken(ticker){
-    const r=await fetch('https://token.jup.ag/all');
-    const list=await r.json();
-    const m=list.find(t=>t.symbol?.toUpperCase()===ticker.toUpperCase());
-    if(m)return{mint:m.address,name:m.name,symbol:m.symbol,decimals:m.decimals||6};
-    throw new Error(`Token "${ticker}" not found on Solana. Try pasting the contract address directly.`);
+    // Jupiter Token API v2 (search by symbol)
+    try{
+      const r=await fetch(`https://tokens.jup.ag/tokens?tags=verified`);
+      if(r.ok){
+        const list=await r.json();
+        const m=list.find(t=>t.symbol?.toUpperCase()===ticker.toUpperCase());
+        if(m)return{mint:m.address,name:m.name,symbol:m.symbol,decimals:m.decimals||6};
+      }
+    }catch(_){}
+    // Fallback: Jupiter token search API
+    try{
+      const r2=await fetch(`https://token.jup.ag/all`);
+      if(r2.ok){
+        const list2=await r2.json();
+        const m2=(Array.isArray(list2)?list2:list2.tokens||[]).find(t=>t.symbol?.toUpperCase()===ticker.toUpperCase());
+        if(m2)return{mint:m2.address,name:m2.name,symbol:m2.symbol,decimals:m2.decimals||6};
+      }
+    }catch(_){}
+    throw new Error(`Token "${ticker}" not found. Paste the contract/mint address directly into the Contract field.`);
   }
   async function solTopHolders(mint,limit=50){
-    const d=await hPost('addresses',{
-      query:{tokenAccounts:{mint}},
-      options:{limit,sortBy:{sortBy:'amount',sortOrder:'desc'}}
-    });
-    return(d.result?.token_accounts||[]).map(a=>({
-      address:a.owner,
-      balance:a.amount/Math.pow(10,a.token_data?.decimals||6),
-      chain:'solana'
-    }));
+    // Step 1: get largest token accounts via standard Solana RPC through Helius
+    const res=await hRpc('getTokenLargestAccounts',[mint,{commitment:'confirmed'}]);
+    const accounts=(res?.value||[]).slice(0,limit);
+    if(!accounts.length)return[];
+    // Step 2: resolve owner addresses via getMultipleAccounts
+    const pubkeys=accounts.map(a=>a.address);
+    const info=await hRpc('getMultipleAccounts',[pubkeys,{encoding:'jsonParsed',commitment:'confirmed'}]);
+    const parsed=(info?.value||[]);
+    return accounts.map((acc,i)=>{
+      const owner=parsed[i]?.data?.parsed?.info?.owner||pubkeys[i];
+      const decimals=parsed[i]?.data?.parsed?.info?.tokenAmount?.decimals||6;
+      const amount=parseFloat(acc.uiAmountString||acc.uiAmount||0);
+      return{address:owner,balance:amount,chain:'solana'};
+    }).filter(a=>a.address);
   }
   async function evmFindToken(ticker,chain){
     const d=await mGet('erc20/metadata',{symbols:[ticker]},chain);
