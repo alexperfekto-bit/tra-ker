@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHAINSCOPE — On-Chain Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="hex-bg">
+  <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <pattern id="hex" x="0" y="0" width="60" height="52" patternUnits="userSpaceOnUse">
+        <polygon points="30,2 58,17 58,35 30,50 2,35 2,17" fill="none" stroke="#ffb938" stroke-width="0.5"/>
+      </pattern>
+    </defs>
+    <rect width="1440" height="900" fill="url(#hex)"/>
+  </svg>
+</div>
+<div class="glow-orb a"></div>
+<div class="glow-orb b"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <div class="logo-block">
+      <div class="logo-mark">
+        <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="14,1 27,7.5 27,20.5 14,27 1,20.5 1,7.5" fill="none" stroke="#ffb938" stroke-width="1.5"/>
+          <polygon points="14,6 22,10.5 22,17.5 14,22 6,17.5 6,10.5" fill="none" stroke="#ffb938" stroke-width="1" opacity="0.4"/>
+          <circle cx="14" cy="14" r="3" fill="#ffb938"/>
+        </svg>
+      </div>
+      <span class="logo-text">CHAIN<em>SCOPE</em></span>
+    </div>
+
+    <nav class="header-nav" id="mainNav">
+      <button class="nav-tab active" data-view="tracker"><span class="tab-dot"></span>Tracker</button>
+      <button class="nav-tab" data-view="clusters"><span class="tab-dot"></span>Clusters</button>
+      <button class="nav-tab" data-view="settings"><span class="tab-dot"></span>Settings</button>
+    </nav>
+
+    <div class="header-right">
+      <div class="sys-clock" id="sysClock">--:--:-- UTC</div>
+      <div class="api-pill bad" id="apiPill">
+        <span class="pill-led"></span>
+        <span id="apiPillLabel">No API key</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="app-shell">
+
+  <!-- COMMAND BAR -->
+  <div class="command-bar fade-in">
+    <div class="command-surface">
+      <div class="command-top">
+
+        <div class="cmd-field">
+          <div class="cmd-label">Token ticker</div>
+          <div class="ticker-wrap">
+            <span class="ticker-prefix">$</span>
+            <input type="text" id="tickerInput" class="input-ticker" placeholder="BONK" autocomplete="off" maxlength="12"/>
+          </div>
+        </div>
+
+        <div class="cmd-field">
+          <div class="cmd-label">Network</div>
+          <div class="chain-row" id="chainRow">
+            <button class="chain-pill active" data-chain="solana"><img src="assets/sol.svg" alt=""> SOL</button>
+            <button class="chain-pill" data-chain="ethereum"><img src="assets/eth.svg" alt=""> ETH</button>
+            <button class="chain-pill" data-chain="bsc"><img src="assets/bnb.svg" alt=""> BSC</button>
+            <button class="chain-pill" data-chain="base"><img src="assets/base.svg" alt=""> BASE</button>
+            <button class="chain-pill" data-chain="arbitrum"><img src="assets/arb.svg" alt=""> ARB</button>
+          </div>
+        </div>
+
+        <div class="cmd-field grow">
+          <div class="cmd-label">Contract address <span style="opacity:.4;font-size:8px;letter-spacing:.04em;text-transform:none">(optional)</span></div>
+          <input type="text" id="contractInput" class="input-contract" placeholder="0x... or Solana token mint address"/>
+        </div>
+
+        <button class="btn-execute" id="scanBtn">
+          <span>Execute</span>
+          <span class="btn-arr">›</span>
+        </button>
+      </div>
+
+      <div class="stats-strip" id="statsStrip">
+        <div class="stat-cell"><div class="sc-label">Token</div><div class="sc-val" id="scToken">—</div><div class="sc-sub" id="scName"></div></div>
+        <div class="stat-cell"><div class="sc-label">Wallets</div><div class="sc-val" id="scWallets">0</div><div class="sc-sub">top holders</div></div>
+        <div class="stat-cell"><div class="sc-label">Clusters</div><div class="sc-val" id="scClusters">0</div><div class="sc-sub">linked groups</div></div>
+        <div class="stat-cell"><div class="sc-label">Transactions</div><div class="sc-val" id="scTxs">0</div><div class="sc-sub">indexed</div></div>
+        <div class="stat-cell"><div class="sc-label">Network</div><div class="sc-val" id="scChain" style="font-size:14px">—</div><div class="sc-sub" id="scUpdated"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMO ALERT -->
+  <div class="demo-alert" id="demoAlert" style="display:none">
+    <span>⚠</span>
+    <span>Demo mode — simulated data. <a onclick="openSettings()">Configure API keys</a> for real wallet scanning.</span>
+    <button onclick="this.parentElement.style.display='none'">✕</button>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-state" id="loadingState">
+    <div class="radar-ring">
+      <div class="radar-sweep"></div>
+      <div class="radar-core"></div>
+    </div>
+    <div class="load-label" id="loadLabel">Initializing scan...</div>
+    <div class="load-sub" id="loadSub">Connecting to RPC</div>
+  </div>
+
+  <!-- TRACKER GRID -->
+  <div class="tracker-grid" id="trackerGrid">
+    <div class="panel fade-in">
+      <div class="panel-head">
+        <div class="panel-accent amber"></div>
+        <div class="panel-title">Wallets <span class="pt-badge" id="walletCount">0</span></div>
+        <div class="panel-tools">
+          <input type="text" class="tool-input" id="walletFilter" placeholder="filter..."/>
+          <select class="tool-select" id="walletSort">
+            <option value="balance">Balance ↓</option>
+            <option value="txcount">Activity ↓</option>
+            <option value="buys">Buys ↓</option>
+            <option value="sells">Sells ↓</option>
+          </select>
+        </div>
+      </div>
+      <div class="wallet-scroll" id="walletList">
+        <div class="empty-state">
+          <div class="es-glyph">◈◈◈</div>
+          <div class="es-text">Enter a ticker and press Execute</div>
+          <div class="es-sub">// awaiting command</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel fade-in" style="animation-delay:.06s">
+      <div class="panel-head">
+        <div class="panel-accent cyan"></div>
+        <div class="panel-title">Activity <span class="pt-badge" id="actLabel" style="color:var(--cyan)">select wallet</span></div>
+        <div class="panel-tools">
+          <div class="filter-tabs" id="filterTabs">
+            <button class="ftab on" data-type="all">All</button>
+            <button class="ftab" data-type="buy">Buy</button>
+            <button class="ftab" data-type="sell">Sell</button>
+            <button class="ftab" data-type="swap">Swap</button>
+            <button class="ftab" data-type="transfer">Transfer</button>
+          </div>
+        </div>
+      </div>
+      <div class="activity-scroll" id="activityList">
+        <div class="empty-state">
+          <div class="es-glyph">[ ]</div>
+          <div class="es-text">Select a wallet to view its transactions</div>
+          <div class="es-sub">// no wallet selected</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLUSTERS -->
+  <div class="clusters-shell" id="clustersShell">
+    <div class="panel fade-in">
+      <div class="panel-head">
+        <div class="panel-accent" style="background:var(--purple)"></div>
+        <div class="panel-title">Wallet clusters</div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--mute);margin-left:4px">// linked address groups detected by on-chain analysis</span>
+      </div>
+      <div id="clusterList"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-veil" id="settingsModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>API Configuration</h2>
+      <button class="modal-x" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-intro">Keys are stored in your browser's localStorage only — never sent anywhere except the respective API endpoints.</p>
+
+      <div class="api-card">
+        <div class="api-card-head">
+          <span class="api-name">Helius</span>
+          <span class="api-tag">Solana</span>
+          <a href="https://helius.dev" target="_blank" class="api-link">Get free key →</a>
+        </div>
+        <input type="password" class="api-input" id="heliusKey" placeholder="your-helius-api-key"/>
+        <p class="api-note">Free tier: 100k credits/month · Covers ~50 wallets with full tx history</p>
+      </div>
+
+      <div class="api-card">
+        <div class="api-card-head">
+          <span class="api-name">Moralis</span>
+          <span class="api-tag">ETH · BSC · Base · ARB</span>
+          <a href="https://moralis.io" target="_blank" class="api-link">Get free key →</a>
+        </div>
+        <input type="password" class="api-input" id="moralisKey" placeholder="your-moralis-api-key"/>
+        <p class="api-note">Free tier: 40k requests/month · Single key for all EVM chains</p>
+      </div>
+
+      <div class="api-card">
+        <div class="api-card-head">
+          <span class="api-name">Etherscan</span>
+          <span class="api-tag">Ethereum fallback</span>
+          <a href="https://etherscan.io/apis" target="_blank" class="api-link">Get free key →</a>
+        </div>
+        <input type="password" class="api-input" id="etherscanKey" placeholder="your-etherscan-api-key"/>
+      </div>
+
+      <button class="btn-save" id="saveKeysBtn">Save keys</button>
+      <div class="save-ok" id="saveOk"></div>
+    </div>
+  </div>
+</div>
+
+<!-- WALLET DRAWER -->
+<div class="drawer-veil" id="drawerVeil"></div>
+<div class="side-drawer" id="sideDrawer">
+  <div class="drawer-header">
+    <div class="d-ring" id="dRing"></div>
+    <div class="dh-body">
+      <div class="dh-addr" id="dAddr">—</div>
+      <div class="dh-meta" id="dMeta">—</div>
+    </div>
+    <button class="drawer-x" id="drawerClose">✕</button>
+  </div>
+  <div class="drawer-kpis" id="dKpis"></div>
+  <div class="drawer-section">
+    <div class="ds-title">Transaction history</div>
+    <div class="drawer-txscroll" id="dTxList"></div>
+  </div>
+  <div class="drawer-section">
+    <div class="ds-title">Linked wallets <span class="ds-badge purple" id="dLinkedBadge">0</span></div>
+    <div id="dLinkedList"></div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/cluster.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function clock() {
+  const el = document.getElementById('sysClock');
+  function tick() {
+    const n = new Date();
+    const pad = x => String(x).padStart(2,'0');
+    if (el) el.textContent = `${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())} UTC`;
+  }
+  tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
