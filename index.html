@@ -781,48 +781,46 @@ const API=(()=>{
   }
   async function solTopHolders(mint,limit=50){
     const k=getKeys().helius;
-    // Method 1: Helius /v1/token-holders (dedicated endpoint, most reliable)
+    if(!k)throw new Error('Helius API key not configured.');
+    const url=`https://mainnet.helius-rpc.com/?api-key=${k}`;
+
+    // Step 1: get token decimals via getAccountInfo on the mint
+    let decimals=6;
     try{
-      const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${k}`,{
+      const rd=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({jsonrpc:'2.0',id:'dec',method:'getAccountInfo',
+          params:[mint,{encoding:'jsonParsed'}]})});
+      const dd=await rd.json();
+      decimals=dd?.result?.value?.data?.parsed?.info?.decimals??6;
+    }catch(_){}
+
+    // Step 2: Helius DAS getTokenAccounts — works on free tier
+    let page=1, results=[];
+    while(results.length<limit){
+      const r=await fetch(url,{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getTokenLargestAccounts',params:[mint]})
+        body:JSON.stringify({
+          jsonrpc:'2.0',id:'ta',method:'getTokenAccounts',
+          params:{mint,page,limit:1000,options:{showZeroBalance:false}}
+        })
       });
+      if(!r.ok)throw new Error(`Helius ${r.status}: ${await r.text()}`);
       const d=await r.json();
-      const accounts=d?.result?.value||[];
-      if(accounts.length){
-        // resolve owners via getMultipleAccounts
-        const pks=accounts.slice(0,limit).map(a=>a.address);
-        const r2=await fetch(`https://mainnet.helius-rpc.com/?api-key=${k}`,{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({jsonrpc:'2.0',id:2,method:'getMultipleAccounts',params:[pks,{encoding:'jsonParsed'}]})
-        });
-        const d2=await r2.json();
-        const infos=d2?.result?.value||[];
-        const seen=new Set();
-        const out=accounts.slice(0,limit).map((acc,i)=>{
-          const owner=infos[i]?.data?.parsed?.info?.owner||null;
-          return{address:owner,balance:parseFloat(acc.uiAmountString||acc.uiAmount||0),chain:'solana'};
-        }).filter(a=>a.address&&a.balance>0&&!seen.has(a.address)&&seen.add(a.address));
-        if(out.length)return out;
-      }
-    }catch(e){console.warn('getTokenLargestAccounts fail',e);}
-    // Method 2: getProgramAccounts with mint filter
-    try{
-      const TOKEN_PROG='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-      const res=await hRpc('getProgramAccounts',[
-        TOKEN_PROG,
-        {commitment:'confirmed',encoding:'jsonParsed',
-         filters:[{dataSize:165},{memcmp:{offset:0,bytes:mint}}]}
-      ]);
-      if(res&&res.length){
-        const seen=new Set();
-        return res
-          .map(a=>{const info=a.account?.data?.parsed?.info;return{address:info?.owner,balance:parseFloat(info?.tokenAmount?.uiAmountString||0),chain:'solana'};})
-          .filter(a=>a.address&&a.balance>0&&!seen.has(a.address)&&seen.add(a.address))
-          .sort((a,b)=>b.balance-a.balance).slice(0,limit);
-      }
-    }catch(e){console.warn('getProgramAccounts fail',e);}
-    throw new Error('Could not fetch token holders. Make sure the mint address is correct and your Helius key is valid.');
+      if(d.error)throw new Error(`Helius: ${d.error.message}`);
+      const items=d?.result?.token_accounts||[];
+      if(!items.length)break;
+      results.push(...items);
+      if(items.length<1000)break;
+      page++;
+    }
+    if(!results.length)throw new Error('No token holders found. Make sure the mint address is correct.');
+    const div=Math.pow(10,decimals);
+    const seen=new Set();
+    return results
+      .filter(a=>a.owner&&!seen.has(a.owner)&&seen.add(a.owner))
+      .sort((a,b)=>Number(b.amount||0)-Number(a.amount||0))
+      .slice(0,limit)
+      .map(a=>({address:a.owner,balance:Number(a.amount||0)/div,chain:'solana'}));
   }
   async function evmFindToken(ticker,chain){
     const d=await mGet('erc20/metadata',{symbols:[ticker]},chain);
