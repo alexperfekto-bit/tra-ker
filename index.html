@@ -466,6 +466,7 @@ select.ti{cursor:pointer}
           <span class="phbadge" id="feedLbl" style="color:var(--cy)">select participant</span>
         </div>
         <div class="phtools">
+          <button class="ti" id="pauseBtn" onclick="App.toggleLivePause()" style="cursor:pointer;display:none">⏸ Pause</button>
           <select class="ti" id="feedFilter">
             <option value="all"><span data-i18n="feed_all">All events</span></option>
             <option value="buy">Buys</option>
@@ -615,7 +616,7 @@ const LANG={
     step_scanned_tpl:'Scanned {i}/{t}',
     // link type labels
     lt_direct:'Direct token transfer', lt_cross:'Cross-asset interaction',
-    lt_bridge:'Shared external address', lt_sync:'Synchronized buys',
+    lt_bridge:'Shared non-DEX address', lt_sync:'Synchronized buys',
     lt_simstart:'Simultaneous first activity',
     // confirm demo
     confirm_demo:`No API key for {chain}.\n\nRun DEMO MODE with simulated data?\n\n(Cancel → open Settings to add keys)`,
@@ -676,7 +677,7 @@ const LANG={
     step_scan_tpl:'Сканируем топ {n} из {t} холдеров ({p}%)…',
     step_scanned_tpl:'Просканировано {i}/{t}',
     lt_direct:'Прямой перевод токена', lt_cross:'Меж-токен взаимодействие',
-    lt_bridge:'Общий внешний адрес', lt_sync:'Синхронные покупки',
+    lt_bridge:'Общий не-DEX адрес', lt_sync:'Синхронные покупки',
     lt_simstart:'Одновременное начало активности',
     confirm_demo:`Нет API ключа для {chain}.\n\nЗапустить ДЕМО-РЕЖИМ с симулированными данными?\n\n(Отмена → открыть Настройки для добавления ключа)`,
     err_no_ticker:'Введите тикер токена или адрес контракта.',
@@ -918,37 +919,64 @@ const API=(()=>{
   function parseMintTxs(rawTxs,wallet,mint){
     const res=[];
     for(const tx of rawTxs){
-      const hasMint=
-        tx.tokenTransfers?.some(t=>t.mint===mint)||
-        tx.accountData?.some(a=>a.tokenBalanceChanges?.some(c=>c.mint===mint));
-      if(!hasMint)continue;
+      // find all transfers of this mint involving this wallet
+      const xfsIn =(tx.tokenTransfers||[]).filter(t=>t.mint===mint&&t.toUserAccount===wallet);
+      const xfsOut=(tx.tokenTransfers||[]).filter(t=>t.mint===mint&&t.fromUserAccount===wallet);
+      // also check tokenBalanceChanges as fallback
+      const balChg=tx.accountData?.flatMap(a=>a.tokenBalanceChanges||[]).find(c=>c.mint===mint&&c.userAccount===wallet);
 
-      let type='other',detail='',counterparty=null,tokenAmount=0;
+      const amtIn =xfsIn .reduce((s,t)=>s+(t.tokenAmount||0),0);
+      const amtOut=xfsOut.reduce((s,t)=>s+(t.tokenAmount||0),0);
 
-      if(tx.type==='SWAP'){
-        const into=tx.tokenTransfers?.find(t=>t.toUserAccount===wallet&&t.mint===mint);
-        const outof=tx.tokenTransfers?.find(t=>t.fromUserAccount===wallet&&t.mint===mint);
-        type=outof?'sell':into?'buy':'swap';
-        tokenAmount=(type==='buy'?into:outof)?.tokenAmount||0;
-        detail=type==='buy'?`Bought ${fmtAmt(tokenAmount)} tokens`
-              :type==='sell'?`Sold ${fmtAmt(tokenAmount)} tokens`
-              :`Swap involving target token`;
-      }else if(tx.type==='TRANSFER'){
-        const xf=tx.tokenTransfers?.find(t=>t.mint===mint);
-        if(xf){
-          type='transfer';
-          counterparty=xf.fromUserAccount===wallet?xf.toUserAccount:xf.fromUserAccount;
-          tokenAmount=xf.tokenAmount||0;
-          detail=`${xf.fromUserAccount===wallet?'→':'←'} ${short(counterparty)}  ${fmtAmt(tokenAmount)} tokens`;
+      if(!amtIn&&!amtOut&&!balChg)continue; // this tx doesn't involve wallet+mint
+
+      let type,detail,counterparty=null,tokenAmount=0;
+      const nc=tx.accountData?.find(a=>a.account===wallet)?.nativeBalanceChange||0;
+      const solChange=nc/1e9; // negative = wallet paid SOL, positive = wallet received SOL
+
+      if(tx.type==='TRANSFER'&&(xfsIn.length||xfsOut.length)){
+        // pure token transfer between wallets
+        if(amtOut>0){
+          type='transfer';counterparty=xfsOut[0]?.toUserAccount||null;
+          tokenAmount=amtOut;
+          detail=`→ ${short(counterparty)}  ${fmtAmt(amtOut)} tokens`;
+        }else{
+          type='transfer';counterparty=xfsIn[0]?.fromUserAccount||null;
+          tokenAmount=amtIn;
+          detail=`← ${short(counterparty)}  ${fmtAmt(amtIn)} tokens`;
+        }
+      }else{
+        // SWAP / UNKNOWN / anything else: classify by SOL flow + token flow
+        if(amtIn>0&&amtOut===0){
+          // received tokens and paid SOL → BUY
+          type='buy';tokenAmount=amtIn;
+          detail=`Bought ${fmtAmt(amtIn)} tokens`;
+        }else if(amtOut>0&&amtIn===0){
+          // gave tokens and received SOL → SELL
+          type='sell';tokenAmount=amtOut;
+          detail=`Sold ${fmtAmt(amtOut)} tokens`;
+        }else if(amtIn>0&&amtOut>0){
+          // both in and out of same mint → partial swap / liquidity
+          type='swap';tokenAmount=amtIn;
+          detail=`Swap ${fmtAmt(amtOut)} → ${fmtAmt(amtIn)} tokens`;
+        }else if(balChg){
+          // fallback: use tokenBalanceChanges
+          const chg=parseFloat(balChg.rawTokenAmount?.uiAmount||balChg.tokenAmount||0);
+          type=chg>0?'buy':chg<0?'sell':'other';
+          tokenAmount=Math.abs(chg);
+          detail=type==='buy'?`Bought ${fmtAmt(tokenAmount)} tokens`
+                :type==='sell'?`Sold ${fmtAmt(tokenAmount)} tokens`:'Token change';
+        }else{
+          type='other';detail='Token interaction';tokenAmount=0;
         }
       }
 
-      const nc=tx.accountData?.find(a=>a.account===wallet)?.nativeBalanceChange||0;
       res.push({
         sig:tx.signature||'',type,
         ts:tx.timestamp?new Date(tx.timestamp*1000):new Date(),
         detail,counterparty,
-        valueSOL:Math.abs(nc/1e9),
+        valueSOL:Math.abs(solChange),
+        solSign:solChange, // keep sign for avg price calc
         explorerUrl:`https://solscan.io/tx/${tx.signature}`,
         chain:'solana',tokenAmount
       });
@@ -1137,7 +1165,8 @@ const API=(()=>{
       const sells=mintTxs.filter(t=>t.type==='sell');
       const totalBought=buys.reduce((s,t)=>s+(t.tokenAmount||0),0);
       const totalSold=sells.reduce((s,t)=>s+(t.tokenAmount||0),0);
-      const totalSpentSOL=buys.reduce((s,t)=>s+(t.valueSOL||0),0);
+      // solSign is negative when wallet paid SOL (buy), use that for accurate cost basis
+      const totalSpentSOL=buys.reduce((s,t)=>s+Math.abs(t.solSign||t.valueSOL||0),0);
       const avgBuyPrice=totalBought>0&&totalSpentSOL>0?totalSpentSOL/totalBought:0;
 
       const w={
@@ -1230,7 +1259,27 @@ const API=(()=>{
     return{tokenInfo:{symbol:ticker,name:ticker+' Token',mint:'demo'},wallets};
   }
 
-  return{getKeys,saveKeys,hasKey,scanToken,generateMock,short};
+  // expose for live polling
+  function parseMintForLive(rawTxs,wallet,mint){
+    return parseMintTxs(rawTxs,wallet,mint);
+  }
+  async function mGetLatest(address,contract,chain){
+    try{
+      const d=await mGet(`${address}/erc20/transfers`,{limit:25,contract_addresses:[contract]},chain);
+      return(d.result||[]).filter(t=>t.contract_address?.toLowerCase()===contract.toLowerCase()).map(t=>({
+        sig:t.transaction_hash,
+        type:t.from_address?.toLowerCase()===address.toLowerCase()?'sell':'buy',
+        ts:new Date(t.block_timestamp),
+        tokenAmount:parseFloat(t.value_decimal||0),
+        valueUSD:parseFloat(t.value_usd||0),
+        detail:(t.from_address?.toLowerCase()===address.toLowerCase()?'Sold ':'Bought ')+parseFloat(t.value_decimal||0).toLocaleString(undefined,{maximumFractionDigits:0})+' tokens',
+        counterparty:t.from_address?.toLowerCase()===address.toLowerCase()?t.to_address:t.from_address,
+        explorerUrl:`https://etherscan.io/tx/${t.transaction_hash}`,
+        chain,solSign:0
+      }));
+    }catch(_){return[];}
+  }
+  return{getKeys,saveKeys,hasKey,scanToken,generateMock,short,hGetTxs,parseMintForLive,mGetLatest};
 })();
 
 /* ══════════════════════════════════════════════════════
@@ -1312,26 +1361,77 @@ const LinkEngine=(()=>{
     }
 
     // ── RULE 3: shared external address
-    //    If two tracked wallets BOTH appear in the cpList of the SAME
-    //    unknown external address → they transacted with a common third
-    //    party (bridge, DEX, mixer, launchpad, etc.) ──
-    const extMap={};   // externalAddr → [trackedWallets that touched it]
+    //    Both wallets interacted with the same UNKNOWN external address.
+    //    IMPORTANT: we skip well-known DEX/AMM/protocol addresses because
+    //    everyone trading any token touches the same pool contracts — that
+    //    is NOT evidence of a link between the wallets.
+    //    Filter: skip addresses touched by more than NOISE_THRESHOLD% of
+    //    scanned wallets (they are public infrastructure, not private relays).
+    const NOISE_THRESHOLD = 0.35; // if >35% of wallets touched it → it's a public contract
+    const MIN_WALLETS_FOR_LINK = 2;
+
+    // Known Solana DEX / AMM / protocol program IDs to always skip
+    const DEX_BLACKLIST = new Set([
+      // Raydium
+      '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+      'routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS',
+      // Orca / Whirlpool
+      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+      '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',
+      // Jupiter aggregator
+      'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+      'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB',
+      'jupoNjAxXgZ4rjzxzPMP4ok5ZcawFHEwNQmQFkSMKBH',
+      // Meteora
+      'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EkSyedso',
+      'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+      // OpenBook / Serum
+      'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX',
+      'opnb2LAfJYbRMAHHvqjCwQxanZn7n73sMkMuqLBrXy',
+      // System / Token programs
+      '11111111111111111111111111111111',
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bwX',
+      'ComputeBudget111111111111111111111111111111',
+      'SysvarRent111111111111111111111111111111111',
+      'SysvarC1ock11111111111111111111111111111111',
+      // Pump.fun
+      '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+      'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM',
+      // Wormhole bridge
+      'worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth',
+      'WormT3McKhFJ2RkiGpdw9GKvNCrB2aB54gb2uV9MfQC',
+      // EVM side — Uniswap, PancakeSwap routers, common bridges
+      '0x7a250d5630b4cf539739df2c5dacb4c659f2488d', // Uniswap v2 router
+      '0xe592427a0aece92de3edee1f18e0157c05861564', // Uniswap v3 router
+      '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45', // Uniswap universal router
+      '0x10ed43c718714eb63d5aa57b78b54704e256024e', // PancakeSwap router
+      '0x13f4ea83d0bd40e75c8222255bc855a974568dd4', // PancakeSwap v3
+      '0x1111111254eeb25477b68fb85ed929f73a960582', // 1inch v5
+      '0x1111111254fb6c44bac0bed2854e76f90643097d', // 1inch v4
+    ].map(a=>a.toLowerCase()));
+
+    const totalWallets = wallets.length;
+    const extMap={};   // externalAddr → Set of tracked wallets that touched it
     for(const w of wallets){
       for(const cp of(w.cpList||[])){
         const cpl=cp.toLowerCase();
-        if(!addrSet.has(cpl)){   // only unknown (non-tracked) addresses
-          if(!extMap[cpl])extMap[cpl]=[];
-          if(!extMap[cpl].includes(w.address.toLowerCase()))
-            extMap[cpl].push(w.address.toLowerCase());
-        }
+        // skip: tracked wallets, known DEX contracts
+        if(addrSet.has(cpl)||DEX_BLACKLIST.has(cpl))continue;
+        if(!extMap[cpl])extMap[cpl]=new Set();
+        extMap[cpl].add(w.address.toLowerCase());
       }
     }
-    for(const[ext,wList]of Object.entries(extMap)){
-      if(wList.length>=2){
+    for(const[ext,wSet]of Object.entries(extMap)){
+      const wList=[...wSet];
+      // skip if this address was touched by too many wallets → public contract
+      if(wList.length/totalWallets > NOISE_THRESHOLD)continue;
+      if(wList.length>=MIN_WALLETS_FOR_LINK){
         for(let i=0;i<wList.length-1;i++)
           for(let j=i+1;j<wList.length;j++)
             addLink(wList[i],wList[j],'shared_bridge',
-              `Both wallets transacted with external address ${API.short(ext)} (any token ever)`);
+              `Both wallets transacted with same address ${API.short(ext)} (${wList.length}/${totalWallets} wallets touched it)`);
       }
     }
 
@@ -1498,30 +1598,42 @@ const UI=(()=>{
     el.innerHTML=h;
   }
 
-  /* ── Activity feed ── */
-  function renderFeed(txs,filter,pName){
-    const el=document.getElementById('feedList');
-    document.getElementById('feedLbl').textContent=pName||'all';
-    if(!txs?.length){el.innerHTML=empty('[ ]',t('empty_no_txs'));return;}
-
-    let list=filter==='all'?[...txs]:txs.filter(t=>t.type===filter);
-    list.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    if(!list.length){el.innerHTML=empty('[ ]',t('empty_no_ev',{type:filter}));return;}
-
-    el.innerHTML=list.slice(0,250).map(tx=>{
-      const icon=ICON[tx.type]||'·';
-      const hash=tx.sig?tx.sig.slice(0,8)+'…':'';
-      const val=tx.valueUSD&&tx.valueUSD>0
-        ?'$'+Number(tx.valueUSD).toLocaleString(undefined,{maximumFractionDigits:2})
-        :tx.valueSOL&&tx.valueSOL>0
-          ?Number(tx.valueSOL).toFixed(4)+' SOL':'';
-      const who=tx.walletAddr
-        ?`<div class="fwho">↳ ${API.short(tx.walletAddr,8)}</div>`:'';
-      return`<div class="fev">
+  /* ── Feed row builder (shared by participant feed + live feed) ── */
+  function buildFeedRow(tx){
+    const icon=ICON[tx.type]||'·';
+    const hash=tx.sig?tx.sig.slice(0,8)+'…':'';
+    const val=tx.valueUSD&&tx.valueUSD>0
+      ?'$'+Number(tx.valueUSD).toLocaleString(undefined,{maximumFractionDigits:2})
+      :tx.valueSOL&&tx.valueSOL>0?Number(tx.valueSOL).toFixed(4)+' SOL':'';
+    let who='';
+    if(tx.participantName){
+      const col=tx.wColor||'var(--am)';
+      who=`<div class="fwho" style="color:${col}">● ${tx.participantName}${tx.walletAddr?' <span style="opacity:.5;font-size:8px">'+API.short(tx.walletAddr,6)+'</span>':''}</div>`;
+    }else if(tx.walletAddr){
+      who=`<div class="fwho">↳ ${API.short(tx.walletAddr,8)}</div>`;
+    }
+    return`<div class="fev">
 <div class="ficon ${tx.type}">${icon}</div>
 <div>${who}<div class="fkind ${tx.type}">${tx.type.toUpperCase()}</div><div class="fdesc">${tx.detail||'—'}</div></div>
 <div class="fright"><div class="ftime">${fmtTime(tx.ts)}</div>${val?`<div class="fval">${val}</div>`:''} ${tx.explorerUrl?`<a href="${tx.explorerUrl}" target="_blank" class="flink">${hash}</a>`:''}</div>
 </div>`;
+  }
+
+  /* ── Activity feed ── */
+  function renderFeed(txs,filter,pName){
+    const el=document.getElementById('feedList');
+    document.getElementById('feedLbl').textContent=pName||t('feed_select');
+    if(!txs?.length){el.innerHTML=empty('[ ]',t('empty_no_txs'));return;}
+    let list=filter==='all'?[...txs]:txs.filter(tx=>tx.type===filter);
+    list.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    if(!list.length){el.innerHTML=empty('[ ]',t('empty_no_ev',{type:filter}));return;}
+    el.innerHTML=list.slice(0,300).map(tx=>{
+      // tag with participant info if not already tagged
+      if(!tx.participantName&&tx.walletAddr){
+        const part=parts?.find(p=>p.wallets.some(w=>w.address===tx.walletAddr));
+        if(part)tx={...tx,participantName:part.name,wColor:part.color};
+      }
+      return buildFeedRow(tx);
     }).join('');
   }
 
@@ -1606,7 +1718,7 @@ ${Object.entries(byType).map(([t,n])=>`<div class="ev-row"><span class="ev-type"
     document.getElementById('drawer').classList.remove('v');
   }
 
-  return{renderParticipants,renderFeed,renderClusters,openDrawer,closeDrawer};
+  return{renderParticipants,renderFeed,renderClusters,openDrawer,closeDrawer,buildFeedRow,emptyH:empty};
 })();
 
 /* ══════════════════════════════════════════════════════
@@ -1784,6 +1896,11 @@ const App=(()=>{
     document.querySelectorAll('.nt').forEach(t=>t.classList.toggle('on',t.dataset.view==='tracker'));
 
     UI.renderParticipants(parts,activeP?.id,'','balance');
+    // seed liveEvents with existing txs so feed is populated immediately
+    liveEvents=wallets.flatMap(w=>{
+      const part=parts.find(p=>p.wallets.some(pw=>pw.address===w.address));
+      return(w.txs||[]).map(tx=>({...tx,walletAddr:w.address,wColor:w.clusterColor,participantName:part?.name,participantId:part?.id,isTracked:true}));
+    }).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,500);
     if(activeP){
       UI.renderFeed(activeP.allTxs,'all',activeP.name);
       $('liveDot').classList.add('v');
@@ -1796,18 +1913,106 @@ const App=(()=>{
     const p=parts.find(x=>x.id===pid);if(!p)return;
     activeP=p;
     UI.renderParticipants(parts,pid,pFilter,pSort);
-    UI.renderFeed(p.allTxs,feedFilter,p.name);
+    // show live events for this participant (includes newly polled ones)
+    const partLive=liveEvents.filter(e=>e.participantId===pid);
+    const allEvs=partLive.length>0?partLive:p.allTxs;
+    UI.renderFeed(allEvs,feedFilter,p.name);
     $('feedList').scrollTop=0;
   }
 
-  /* Live polling placeholder — pulses the dot every 30s
-     Real impl: re-fetch latest page, diff sigs, prepend new events */
+  /* ── LIVE FEED — real polling ──
+     Every 20s: fetch the latest page of transactions for each tracked wallet.
+     New sigs (not in knownSigs) are parsed, classified, prepended to the
+     global live feed with participant label if wallet is tracked.
+  */
+  let knownSigs=new Set();
+  let livePaused=false;
+  let liveEvents=[]; // global sorted list for the live feed panel
+
   function startLive(){
     if(liveTimer)clearInterval(liveTimer);
-    liveTimer=setInterval(()=>{
-      const dot=$('liveDot');
-      if(dot){dot.style.opacity='.2';setTimeout(()=>dot.style.opacity='1',400);}
-    },8000);
+    // seed knownSigs with what we already have so first poll only shows NEW txs
+    knownSigs=new Set();
+    for(const w of wallets)(w.txs||[]).forEach(t=>{if(t.sig)knownSigs.add(t.sig);});
+    liveEvents=[];
+    $('liveDot').classList.add('v');
+    $('liveTxt').classList.add('v');
+    const pb=$('pauseBtn');if(pb)pb.style.display='block';
+    // poll immediately then every 20s
+    pollLive();
+    liveTimer=setInterval(()=>{if(!livePaused)pollLive();},20000);
+  }
+
+  async function pollLive(){
+    if(!wallets.length||!info)return;
+    const mint=info.mint||info.address;
+    if(!mint||mint==='demo')return;
+
+    const newEvents=[];
+    // poll latest page for each tracked wallet (only 1 page = 100 txs)
+    for(const w of wallets){
+      try{
+        let fresh=[];
+        if(chain==='solana'){
+          const batch=await API.hGetTxs(w.address,{limit:25,type:'ALL'});
+          if(!batch?.length)continue;
+          // parse for target mint
+          const parsed=API.parseMintForLive(batch,w.address,mint);
+          fresh=parsed.filter(t=>t.sig&&!knownSigs.has(t.sig));
+        }else{
+          // EVM: fetch latest transfers for this contract
+          const d=await API.mGetLatest(w.address,info.address,chain);
+          fresh=(d||[]).filter(t=>t.sig&&!knownSigs.has(t.sig));
+        }
+        for(const ev of fresh){
+          knownSigs.add(ev.sig);
+          // find which participant this wallet belongs to
+          const part=parts.find(p=>p.wallets.some(pw=>pw.address===w.address));
+          newEvents.push({
+            ...ev,
+            walletAddr:w.address,
+            wColor:w.clusterColor||null,
+            participantName:part?part.name:null,
+            participantId:part?part.id:null,
+            isTracked:true
+          });
+        }
+      }catch(_){}
+      await new Promise(r=>setTimeout(r,80));
+    }
+
+    if(!newEvents.length)return;
+    // sort newest first, prepend to liveEvents
+    newEvents.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    liveEvents=[...newEvents,...liveEvents].slice(0,500);
+    renderLiveFeed();
+    // flash live dot
+    const dot=$('liveDot');
+    if(dot){dot.style.background='#fff';setTimeout(()=>dot.style.background='',300);}
+  }
+
+  function renderLiveFeed(){
+    const el=$('feedList');
+    if(!el)return;
+    // if a participant is selected, show only their events; otherwise show all live
+    const evs=activeP
+      ? liveEvents.filter(e=>e.participantId===activeP.id)
+      : liveEvents;
+    const filter=$('feedFilter')?.value||'all';
+    const list=filter==='all'?evs:evs.filter(e=>e.type===filter);
+    if(!list.length){
+      if(!activeP)el.innerHTML=UI.emptyH('[ ]',t('empty_select'));
+      return;
+    }
+    el.innerHTML=list.slice(0,300).map(ev=>UI.buildFeedRow(ev)).join('');
+  }
+
+  function toggleLivePause(){
+    livePaused=!livePaused;
+    const btn=$('pauseBtn');
+    if(btn)btn.textContent=livePaused?'▶ Resume':'⏸ Pause';
+    const dot=$('liveDot');
+    if(dot)dot.style.opacity=livePaused?'.2':'1';
   }
 
   function showLoader(on,msg=''){
@@ -1850,7 +2055,7 @@ const App=(()=>{
     }catch(_){}
   }
 
-  return{init,openSettings};
+  return{init,openSettings,toggleLivePause};
 })();
 
 function openSettings(){App.openSettings();}
