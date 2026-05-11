@@ -4,129 +4,689 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CHAINSCOPE — On-Chain Intelligence</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────
+   RESET & VARS
+───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #080809;
+  --bg1:     #0e0e10;
+  --bg2:     #141416;
+  --bg3:     #1a1a1e;
+  --bg4:     #222228;
+  --line:    rgba(255,255,255,0.06);
+  --line2:   rgba(255,255,255,0.10);
+  --line3:   rgba(255,255,255,0.16);
+  --amber:   #f5a623;
+  --amber2:  #ffc55e;
+  --amberLo: rgba(245,166,35,0.10);
+  --cyan:    #00d4ff;
+  --cyanLo:  rgba(0,212,255,0.09);
+  --green:   #00e87a;
+  --greenLo: rgba(0,232,122,0.09);
+  --red:     #ff3b3b;
+  --redLo:   rgba(255,59,59,0.09);
+  --purple:  #a855f7;
+  --purpLo:  rgba(168,85,247,0.10);
+  --muted:   #5c5c6e;
+  --sub:     #3a3a48;
+  --txt:     #e0e0ec;
+  --txt2:    #9494a8;
+  --syne:    'Syne', sans-serif;
+  --mono:    'DM Mono', monospace;
+}
+
+html { font-size: 13px; scrollbar-width: thin; scrollbar-color: var(--bg4) transparent; }
+body { font-family: var(--mono); background: var(--bg); color: var(--txt); min-height: 100vh; overflow-x: hidden; }
+
+/* scanline texture */
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.012) 2px, rgba(0,0,0,0.012) 4px);
+}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--sub); }
+
+/* ─────────────────────────────────────────────────────
+   BACKGROUND LAYER
+───────────────────────────────────────────────────── */
+#hexBg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+#hexBg svg { width: 100%; height: 100%; opacity: 0.03; }
+
+.orb {
+  position: fixed; border-radius: 50%; pointer-events: none; z-index: 0;
+  filter: blur(90px);
+}
+.orb-a { width: 600px; height: 600px; top: -200px; right: -100px; background: radial-gradient(circle, rgba(245,166,35,0.10) 0%, transparent 70%); }
+.orb-b { width: 500px; height: 500px; bottom: -180px; left: -80px; background: radial-gradient(circle, rgba(0,212,255,0.06) 0%, transparent 70%); }
+
+/* ─────────────────────────────────────────────────────
+   HEADER
+───────────────────────────────────────────────────── */
+.hdr {
+  position: sticky; top: 0; z-index: 300;
+  background: rgba(8,8,9,0.92);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line2);
+}
+.hdr-inner {
+  display: flex; align-items: center;
+  max-width: 1540px; margin: 0 auto; height: 50px;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 11px;
+  padding: 0 24px; height: 100%;
+  border-right: 1px solid var(--line);
+  text-decoration: none; flex-shrink: 0;
+}
+.logo-hex { width: 24px; height: 24px; flex-shrink: 0; }
+.logo-name {
+  font-family: var(--syne); font-weight: 800; font-size: 14px;
+  letter-spacing: 0.14em; color: var(--txt);
+}
+.logo-name span { color: var(--amber); }
+
+.hdr-nav { display: flex; align-items: stretch; height: 100%; padding: 0 4px; }
+.ntab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 16px; height: 100%;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--muted); background: none; border: none;
+  border-bottom: 2px solid transparent; cursor: pointer;
+  transition: color 0.14s, border-color 0.14s;
+}
+.ntab:hover { color: var(--txt2); }
+.ntab.on { color: var(--amber); border-bottom-color: var(--amber); }
+.ntab-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+
+.hdr-right {
+  margin-left: auto; display: flex; align-items: center; gap: 12px;
+  padding: 0 20px; border-left: 1px solid var(--line); height: 100%;
+}
+.clock { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
+
+.apipill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer; border: 1px solid; transition: all 0.18s;
+}
+.apipill.bad  { color: var(--red);   border-color: rgba(255,59,59,0.25);  background: rgba(255,59,59,0.06); }
+.apipill.good { color: var(--green); border-color: rgba(0,232,122,0.25); background: rgba(0,232,122,0.05); }
+.pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* ─────────────────────────────────────────────────────
+   SHELL
+───────────────────────────────────────────────────── */
+.shell {
+  position: relative; z-index: 1;
+  max-width: 1540px; margin: 0 auto;
+  padding: 24px 24px 80px;
+}
+
+/* ─────────────────────────────────────────────────────
+   COMMAND BAR
+───────────────────────────────────────────────────── */
+.cmd-bar { margin-bottom: 18px; }
+
+.cmd-card {
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+/* amber top-edge glow */
+.cmd-card::before {
+  content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  opacity: 0.55;
+}
+
+.cmd-top {
+  display: flex; align-items: flex-end; gap: 14px;
+  padding: 20px 22px; flex-wrap: wrap;
+}
+
+.cf { display: flex; flex-direction: column; gap: 6px; }
+.cf-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+}
+.cf-label::before { content: '// '; color: var(--amber); opacity: 0.45; }
+
+/* ticker */
+.ticker-wrap { position: relative; }
+.ticker-pre { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 15px; color: var(--amber); pointer-events: none; line-height: 1; }
+#tickerInput {
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px;
+  color: var(--amber2); font-family: var(--syne); font-size: 20px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 9px 14px 9px 26px; width: 180px; outline: none;
+  caret-color: var(--amber); transition: border-color 0.18s, box-shadow 0.18s;
+}
+#tickerInput:focus { border-color: rgba(245,166,35,0.4); box-shadow: 0 0 0 3px rgba(245,166,35,0.07); }
+#tickerInput::placeholder { color: var(--sub); font-size: 16px; letter-spacing: 0.06em; }
+
+/* chains */
+.chains { display: flex; gap: 5px; flex-wrap: wrap; }
+.cpill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 12px; border-radius: 24px;
+  background: var(--bg2); border: 1px solid var(--line2);
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  cursor: pointer; transition: all 0.15s;
+}
+.cpill:hover { color: var(--txt2); border-color: var(--line3); }
+.cpill.on { background: var(--amberLo); border-color: rgba(245,166,35,0.35); color: var(--amber); }
+.cpill img { width: 14px; height: 14px; border-radius: 50%; }
+
+/* contract input */
+#contractInput {
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px;
+  color: var(--txt); font-family: var(--mono); font-size: 11px;
+  padding: 10px 13px; width: 100%; outline: none; transition: border-color 0.15s;
+}
+#contractInput:focus { border-color: var(--line3); }
+#contractInput::placeholder { color: var(--sub); }
+.cf.grow { flex: 1; min-width: 200px; }
+
+/* execute btn */
+.btn-go {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--amber); color: #080809;
+  border: none; border-radius: 8px;
+  padding: 0 26px; height: 41px; flex-shrink: 0;
+  font-family: var(--syne); font-size: 13px; font-weight: 800;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: background 0.16s, box-shadow 0.16s, transform 0.1s;
+}
+.btn-go::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg,rgba(255,255,255,0.18) 0%,transparent 55%); }
+.btn-go:hover { background: var(--amber2); box-shadow: 0 4px 22px rgba(245,166,35,0.38); transform: translateY(-1px); }
+.btn-go:active { transform: translateY(0); }
+.btn-go:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-go-arr { font-size: 17px; font-weight: 400; }
+
+/* stats strip */
+.stats-strip { display: none; border-top: 1px solid var(--line); }
+.stats-strip.vis { display: flex; }
+.sc {
+  flex: 1; padding: 12px 20px; border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sc:last-child { border-right: none; }
+.sc-l { font-family: var(--mono); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+.sc-v { font-family: var(--syne); font-size: 21px; font-weight: 800; color: var(--amber); line-height: 1.05; }
+.sc-s { font-family: var(--mono); font-size: 9px; color: var(--sub); }
+
+/* ─────────────────────────────────────────────────────
+   DEMO BANNER
+───────────────────────────────────────────────────── */
+.demo-banner {
+  display: none; align-items: center; gap: 10px;
+  background: rgba(245,166,35,0.05); border: 1px solid rgba(245,166,35,0.16);
+  border-radius: 8px; padding: 9px 15px; margin-bottom: 16px;
+  font-family: var(--mono); font-size: 10px; color: rgba(245,166,35,0.75);
+}
+.demo-banner.vis { display: flex; }
+.demo-banner a { color: var(--amber); cursor: pointer; }
+.demo-banner button { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; }
+
+/* ─────────────────────────────────────────────────────
+   LOADING
+───────────────────────────────────────────────────── */
+.loader {
+  display: none; flex-direction: column; align-items: center;
+  justify-content: center; gap: 18px; padding: 80px 0;
+}
+.loader.vis { display: flex; }
+
+.radar {
+  width: 72px; height: 72px; position: relative;
+  border-radius: 50%; border: 1px solid rgba(245,166,35,0.18);
+}
+.radar::before {
+  content: ''; position: absolute; inset: -12px; border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.10);
+  animation: rexp 2s ease-out infinite;
+}
+@keyframes rexp { 0%{transform:scale(1);opacity:.7} 100%{transform:scale(1.55);opacity:0} }
+.radar-sw {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+}
+.radar-sw::before {
+  content: ''; position: absolute; width: 50%; height: 50%; top: 0; left: 50%;
+  transform-origin: 0% 100%;
+  background: conic-gradient(rgba(245,166,35,0.5), transparent 105deg);
+  animation: spin 1.3s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.radar-dot {
+  position: absolute; inset: 30px; border-radius: 50%;
+  background: var(--amber); box-shadow: 0 0 14px rgba(245,166,35,0.9);
+}
+.ld-txt { font-family: var(--mono); font-size: 11px; color: var(--amber); letter-spacing: 0.08em; }
+.ld-sub { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.06em; }
+
+/* ─────────────────────────────────────────────────────
+   2-COL GRID
+───────────────────────────────────────────────────── */
+.grid {
+  display: none;
+  grid-template-columns: 380px 1fr;
+  gap: 13px; align-items: start;
+}
+.grid.vis { display: grid; }
+@media (max-width: 1050px) { .grid { grid-template-columns: 1fr; } }
+
+/* ─────────────────────────────────────────────────────
+   PANEL
+───────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg1); border: 1px solid var(--line2);
+  border-radius: 12px; overflow: hidden;
+}
+.ph {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,0.01); flex-wrap: wrap;
+}
+.ph-bar { width: 2px; height: 15px; border-radius: 2px; flex-shrink: 0; }
+.ph-bar.a { background: var(--amber); }
+.ph-bar.c { background: var(--cyan); }
+.ph-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+  display: flex; align-items: center; gap: 7px;
+}
+.ph-badge {
+  font-size: 9px; padding: 2px 7px; border-radius: 9px;
+  background: var(--bg4); color: var(--txt2);
+}
+.ph-tools { margin-left: auto; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+
+.ti {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--txt2); font-family: var(--mono); font-size: 10px;
+  padding: 5px 9px; outline: none; width: 120px; transition: border-color 0.14s;
+}
+.ti:focus { border-color: var(--line3); }
+.ti::placeholder { color: var(--sub); }
+
+select.ti { cursor: pointer; }
+
+/* ─────────────────────────────────────────────────────
+   WALLET LIST
+───────────────────────────────────────────────────── */
+.wscroll { max-height: 680px; overflow-y: auto; }
+
+.wr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+  cursor: pointer; position: relative; transition: background 0.1s;
+}
+.wr:last-child { border-bottom: none; }
+.wr:hover { background: rgba(255,255,255,0.02); }
+.wr.sel { background: rgba(245,166,35,0.055); }
+.wr.sel::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--amber); }
+
+.wr-n { font-family: var(--mono); font-size: 9px; color: var(--sub); width: 16px; text-align: right; flex-shrink: 0; }
+.wr-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.wr-dot.glow { box-shadow: 0 0 6px currentColor; }
+.wr-addr { font-family: var(--mono); font-size: 11px; color: var(--txt); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wr-bal { font-family: var(--syne); font-size: 11px; font-weight: 700; color: var(--amber); flex-shrink: 0; white-space: nowrap; }
+.wr-tags { display: flex; gap: 3px; flex-shrink: 0; }
+.tt { font-family: var(--mono); font-size: 8px; padding: 1px 5px; border-radius: 3px; }
+.tt.b { background: var(--greenLo); color: var(--green); }
+.tt.s { background: var(--redLo);   color: var(--red); }
+.tt.w { background: var(--cyanLo);  color: var(--cyan); }
+.wr-exp { background: none; border: none; color: var(--sub); font-family: var(--mono); font-size: 10px; cursor: pointer; padding: 0 2px; flex-shrink: 0; transition: color 0.13s; }
+.wr-exp:hover { color: var(--amber); }
+
+/* children block */
+.wc-block { background: rgba(245,166,35,0.02); border-left: 2px solid rgba(245,166,35,0.12); margin-left: 16px; }
+.wc { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background 0.1s; }
+.wc:hover { background: rgba(255,255,255,0.018); }
+.wc:last-child { border-bottom: none; }
+.wc-addr { font-family: var(--mono); font-size: 10px; color: var(--txt2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wc-why { font-family: var(--mono); font-size: 8px; color: var(--purple); background: var(--purpLo); padding: 2px 5px; border-radius: 3px; flex-shrink: 0; }
+.wc-bal { font-family: var(--mono); font-size: 10px; color: var(--muted); flex-shrink: 0; }
+
+/* ─────────────────────────────────────────────────────
+   FILTER TABS
+───────────────────────────────────────────────────── */
+.ftabs { display: flex; gap: 3px; }
+.ft {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 4px;
+  background: none; border: 1px solid var(--line2); color: var(--muted);
+  cursor: pointer; transition: all 0.13s;
+}
+.ft:hover { color: var(--txt2); border-color: var(--line3); }
+.ft.on { background: var(--amberLo); border-color: rgba(245,166,35,0.3); color: var(--amber); }
+
+/* ─────────────────────────────────────────────────────
+   ACTIVITY
+───────────────────────────────────────────────────── */
+.ascroll { max-height: 680px; overflow-y: auto; }
+
+.txr {
+  display: grid; grid-template-columns: 36px 1fr auto;
+  gap: 11px; align-items: start;
+  padding: 11px 16px; border-bottom: 1px solid var(--line);
+  transition: background 0.1s;
+}
+.txr:hover { background: rgba(255,255,255,0.018); }
+.txr:last-child { border-bottom: none; }
+
+.txbadge {
+  width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.txbadge.buy      { background: var(--greenLo); border: 1px solid rgba(0,232,122,0.14); }
+.txbadge.sell     { background: var(--redLo);   border: 1px solid rgba(255,59,59,0.14); }
+.txbadge.swap     { background: var(--cyanLo);  border: 1px solid rgba(0,212,255,0.14); }
+.txbadge.transfer { background: var(--purpLo);  border: 1px solid rgba(168,85,247,0.14); }
+.txbadge.other    { background: rgba(50,50,60,0.35); border: 1px solid var(--line2); }
+
+.txkind { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 3px; }
+.txkind.buy      { color: var(--green); }
+.txkind.sell     { color: var(--red); }
+.txkind.swap     { color: var(--cyan); }
+.txkind.transfer { color: var(--purple); }
+.txkind.other    { color: var(--muted); }
+
+.txdesc { font-family: var(--mono); font-size: 11px; color: var(--txt2); line-height: 1.45; }
+.txright { text-align: right; }
+.txtime { font-family: var(--mono); font-size: 9px; color: var(--muted); white-space: nowrap; }
+.txval  { font-family: var(--syne); font-size: 11px; font-weight: 700; color: var(--txt); margin-top: 3px; }
+.txlink { display: block; font-family: var(--mono); font-size: 9px; color: var(--sub); text-decoration: none; margin-top: 4px; transition: color 0.13s; }
+.txlink:hover { color: var(--amber); }
+
+/* ─────────────────────────────────────────────────────
+   CLUSTERS VIEW
+───────────────────────────────────────────────────── */
+.cv { display: none; }
+.cv.vis { display: block; }
+
+.cblock { border-bottom: 1px solid var(--line); }
+.cblock:last-child { border-bottom: none; }
+.chead {
+  display: flex; align-items: center; gap: 11px;
+  padding: 14px 18px; background: rgba(255,255,255,0.01);
+}
+.corb { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 9px currentColor; }
+.cname { font-family: var(--syne); font-weight: 800; font-size: 13px; color: var(--txt); }
+.cbadge { font-family: var(--mono); font-size: 9px; background: var(--bg4); color: var(--txt2); padding: 2px 8px; border-radius: 3px; }
+.cwhy  { font-family: var(--mono); font-size: 9px; background: var(--purpLo); color: var(--purple); padding: 2px 8px; border-radius: 3px; }
+.crows { }
+.crow  {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 18px 9px 41px;
+  border-top: 1px solid var(--line); cursor: pointer; transition: background 0.1s;
+}
+.crow:hover { background: rgba(255,255,255,0.018); }
+.crow-main { font-family: var(--mono); font-size: 8px; color: var(--amber); background: var(--amberLo); border: 1px solid rgba(245,166,35,0.2); padding: 2px 6px; border-radius: 3px; }
+.crow-addr { font-family: var(--mono); font-size: 11px; color: var(--txt2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow-bal  { font-family: var(--syne); font-size: 11px; font-weight: 700; color: var(--amber); flex-shrink: 0; }
+
+/* ─────────────────────────────────────────────────────
+   EMPTY STATE
+───────────────────────────────────────────────────── */
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: 11px;
+  padding: 55px 20px; text-align: center;
+}
+.e-icon { font-family: var(--mono); font-size: 26px; color: var(--bg4); letter-spacing: -3px; }
+.e-txt  { font-family: var(--mono); font-size: 11px; color: var(--sub); }
+.e-sub  { font-family: var(--mono); font-size: 9px; color: var(--bg4); }
+
+/* ─────────────────────────────────────────────────────
+   MODAL
+───────────────────────────────────────────────────── */
+.mveil {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+}
+.mveil.vis { display: flex; }
+.mbox {
+  background: var(--bg1); border: 1px solid var(--line3);
+  border-radius: 12px; width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+  animation: mslide 0.22s cubic-bezier(0.34,1.5,0.64,1);
+}
+@keyframes mslide { from{transform:scale(0.9) translateY(20px);opacity:0} to{transform:scale(1);opacity:1} }
+.mhead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 17px 20px; border-bottom: 1px solid var(--line);
+}
+.mhead h2 { font-family: var(--syne); font-weight: 800; font-size: 15px; }
+.mclose {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--muted); font-size: 13px; width: 27px; height: 27px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.13s;
+}
+.mclose:hover { color: var(--txt); border-color: var(--line3); }
+.mbody { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.mintro { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.7; }
+
+.acard { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.acard-hd { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.acard-name { font-family: var(--syne); font-weight: 800; font-size: 13px; }
+.acard-tag  { font-family: var(--mono); font-size: 9px; background: var(--cyanLo); color: var(--cyan); padding: 2px 8px; border-radius: 3px; border: 1px solid rgba(0,212,255,0.14); }
+.acard-link { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--amber); text-decoration: none; }
+.acard-link:hover { text-decoration: underline; }
+.ainput {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 7px;
+  color: var(--txt); font-family: var(--mono); font-size: 11px;
+  padding: 9px 13px; width: 100%; outline: none; transition: border-color 0.18s;
+}
+.ainput:focus { border-color: rgba(245,166,35,0.38); }
+.anote { font-family: var(--mono); font-size: 9px; color: var(--sub); margin-top: 7px; line-height: 1.65; }
+
+.btn-save {
+  background: var(--amber); color: #080809; border: none; border-radius: 7px;
+  padding: 10px 24px; font-family: var(--syne); font-size: 13px; font-weight: 800;
+  letter-spacing: 0.08em; cursor: pointer; transition: all 0.16s; align-self: flex-start;
+}
+.btn-save:hover { background: var(--amber2); box-shadow: 0 0 18px rgba(245,166,35,0.3); }
+.saveok { font-family: var(--mono); font-size: 10px; color: var(--green); margin-top: 2px; }
+
+/* ─────────────────────────────────────────────────────
+   DRAWER
+───────────────────────────────────────────────────── */
+.dveil { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); display: none; }
+.dveil.vis { display: block; }
+
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 301;
+  width: 500px; max-width: 95vw;
+  background: var(--bg1); border-left: 1px solid var(--line3);
+  overflow-y: auto; display: none;
+}
+.drawer.vis { display: block; animation: dslide 0.26s cubic-bezier(0.22,1,0.36,1); }
+@keyframes dslide { from{transform:translateX(100%)} to{transform:translateX(0)} }
+
+.dhdr {
+  position: sticky; top: 0; background: var(--bg1); z-index: 1;
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 17px 20px; border-bottom: 1px solid var(--line);
+}
+.dring { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+.dbody { flex: 1; min-width: 0; }
+.daddr { font-family: var(--mono); font-size: 11px; color: var(--txt); word-break: break-all; line-height: 1.5; }
+.dmeta { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 4px; }
+.dclose { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 0; flex-shrink: 0; transition: color 0.13s; }
+.dclose:hover { color: var(--txt); }
+
+.dkpis { display: grid; grid-template-columns: repeat(4,1fr); border-bottom: 1px solid var(--line); }
+.dkpi { padding: 12px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.dkpi:last-child { border-right: none; }
+.dkl { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.dkv { font-family: var(--syne); font-size: 18px; font-weight: 800; color: var(--amber); line-height: 1; }
+
+.dsec { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.dstitle {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 12px; display: flex; align-items: center; gap: 7px;
+}
+.dsbadge { font-size: 9px; padding: 2px 7px; border-radius: 3px; background: var(--bg4); color: var(--txt2); }
+.dsbadge.p { background: var(--purpLo); color: var(--purple); }
+.dtscroll { max-height: 300px; overflow-y: auto; }
+
+.lrow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; border-radius: 7px;
+  background: var(--bg2); border: 1px solid var(--line);
+  margin-bottom: 6px; cursor: pointer; transition: all 0.13s;
+}
+.lrow:hover { border-color: rgba(168,85,247,0.28); background: rgba(168,85,247,0.04); }
+.lrow-addr { font-family: var(--mono); font-size: 10px; color: var(--txt2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow-why  { font-family: var(--mono); font-size: 8px; color: var(--purple); background: var(--purpLo); padding: 2px 5px; border-radius: 3px; flex-shrink: 0; }
+.lrow-bal  { font-family: var(--syne); font-size: 11px; font-weight: 700; color: var(--amber); flex-shrink: 0; }
+
+/* ─────────────────────────────────────────────────────
+   ANIM
+───────────────────────────────────────────────────── */
+.fin { animation: fin 0.35s ease both; }
+@keyframes fin { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+</style>
 </head>
 <body>
 
-<div class="hex-bg">
+<!-- ── BG ── -->
+<div id="hexBg">
   <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
     <defs>
-      <pattern id="hex" x="0" y="0" width="60" height="52" patternUnits="userSpaceOnUse">
-        <polygon points="30,2 58,17 58,35 30,50 2,35 2,17" fill="none" stroke="#ffb938" stroke-width="0.5"/>
+      <pattern id="hxp" x="0" y="0" width="58" height="50" patternUnits="userSpaceOnUse">
+        <polygon points="29,1.5 56.5,16 56.5,34 29,48.5 1.5,34 1.5,16" fill="none" stroke="#f5a623" stroke-width="0.4"/>
       </pattern>
     </defs>
-    <rect width="1440" height="900" fill="url(#hex)"/>
+    <rect width="1440" height="900" fill="url(#hxp)"/>
   </svg>
 </div>
-<div class="glow-orb a"></div>
-<div class="glow-orb b"></div>
+<div class="orb orb-a"></div>
+<div class="orb orb-b"></div>
 
-<!-- HEADER -->
-<header>
-  <div class="header-inner">
-    <div class="logo-block">
-      <div class="logo-mark">
-        <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <polygon points="14,1 27,7.5 27,20.5 14,27 1,20.5 1,7.5" fill="none" stroke="#ffb938" stroke-width="1.5"/>
-          <polygon points="14,6 22,10.5 22,17.5 14,22 6,17.5 6,10.5" fill="none" stroke="#ffb938" stroke-width="1" opacity="0.4"/>
-          <circle cx="14" cy="14" r="3" fill="#ffb938"/>
-        </svg>
-      </div>
-      <span class="logo-text">CHAIN<em>SCOPE</em></span>
-    </div>
+<!-- ── HEADER ── -->
+<header class="hdr">
+  <div class="hdr-inner">
+    <a class="logo" href="#">
+      <svg class="logo-hex" viewBox="0 0 24 24" fill="none">
+        <polygon points="12,1 23,6.5 23,17.5 12,23 1,17.5 1,6.5" fill="none" stroke="#f5a623" stroke-width="1.4"/>
+        <polygon points="12,5 19,9 19,15 12,19 5,15 5,9" fill="none" stroke="#f5a623" stroke-width="0.8" opacity="0.4"/>
+        <circle cx="12" cy="12" r="2.5" fill="#f5a623"/>
+      </svg>
+      <span class="logo-name">CHAIN<span>SCOPE</span></span>
+    </a>
 
-    <nav class="header-nav" id="mainNav">
-      <button class="nav-tab active" data-view="tracker"><span class="tab-dot"></span>Tracker</button>
-      <button class="nav-tab" data-view="clusters"><span class="tab-dot"></span>Clusters</button>
-      <button class="nav-tab" data-view="settings"><span class="tab-dot"></span>Settings</button>
+    <nav class="hdr-nav">
+      <button class="ntab on" data-view="tracker"><span class="ntab-dot"></span>Tracker</button>
+      <button class="ntab" data-view="clusters"><span class="ntab-dot"></span>Clusters</button>
+      <button class="ntab" data-view="settings"><span class="ntab-dot"></span>Settings</button>
     </nav>
 
-    <div class="header-right">
-      <div class="sys-clock" id="sysClock">--:--:-- UTC</div>
-      <div class="api-pill bad" id="apiPill">
-        <span class="pill-led"></span>
-        <span id="apiPillLabel">No API key</span>
+    <div class="hdr-right">
+      <span class="clock" id="clk">--:--:-- UTC</span>
+      <div class="apipill bad" id="apipill">
+        <span class="pill-dot"></span>
+        <span id="apilabel">No API key</span>
       </div>
     </div>
   </div>
 </header>
 
-<!-- MAIN -->
-<div class="app-shell">
+<!-- ── SHELL ── -->
+<div class="shell">
 
   <!-- COMMAND BAR -->
-  <div class="command-bar fade-in">
-    <div class="command-surface">
-      <div class="command-top">
+  <div class="cmd-bar fin">
+    <div class="cmd-card">
+      <div class="cmd-top">
 
-        <div class="cmd-field">
-          <div class="cmd-label">Token ticker</div>
+        <div class="cf">
+          <div class="cf-label">Token ticker</div>
           <div class="ticker-wrap">
-            <span class="ticker-prefix">$</span>
-            <input type="text" id="tickerInput" class="input-ticker" placeholder="BONK" autocomplete="off" maxlength="12"/>
+            <span class="ticker-pre">$</span>
+            <input type="text" id="tickerInput" placeholder="BONK" autocomplete="off" maxlength="12"/>
           </div>
         </div>
 
-        <div class="cmd-field">
-          <div class="cmd-label">Network</div>
-          <div class="chain-row" id="chainRow">
-            <button class="chain-pill active" data-chain="solana"><img src="assets/sol.svg" alt=""> SOL</button>
-            <button class="chain-pill" data-chain="ethereum"><img src="assets/eth.svg" alt=""> ETH</button>
-            <button class="chain-pill" data-chain="bsc"><img src="assets/bnb.svg" alt=""> BSC</button>
-            <button class="chain-pill" data-chain="base"><img src="assets/base.svg" alt=""> BASE</button>
-            <button class="chain-pill" data-chain="arbitrum"><img src="assets/arb.svg" alt=""> ARB</button>
+        <div class="cf">
+          <div class="cf-label">Network</div>
+          <div class="chains">
+            <button class="cpill on" data-chain="solana"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%239945FF'/%3E%3Cpath d='M9 20.5h11.5l2.5-2.5H11L9 20.5zm0-9 2.5 2.5H23L20.5 11.5H9zm11.5 4.5H9l2.5 2.5H23L20.5 16z' fill='white'/%3E%3C/svg%3E" alt=""> SOL</button>
+            <button class="cpill" data-chain="ethereum"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23627EEA'/%3E%3Cpath d='M16 5l-.16.54V20.3l.16.16 7.33-4.33L16 5z' fill='white' opacity='.8'/%3E%3Cpath d='M16 5L8.67 16.13l7.33 4.33V5z' fill='white'/%3E%3Cpath d='M16 22v6l7.34-10.33L16 22z' fill='white' opacity='.8'/%3E%3Cpath d='M16 28v-6l-7.33-4.31L16 28z' fill='white'/%3E%3C/svg%3E" alt=""> ETH</button>
+            <button class="cpill" data-chain="bsc"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23F3BA2F'/%3E%3Cpath d='M16 8l2.5 2.5L16 13l-2.5-2.5L16 8zm-5.5 5.5L13 16l-2.5 2.5L8 16l2.5-2.5zm11 0L24 16l-2.5 2.5L19 16l2.5-2.5zm-5.5 5.5L18.5 21.5 16 24l-2.5-2.5L16 19zm0-3.5l2.5-2.5-2.5-2.5-2.5 2.5L16 15.5z' fill='white'/%3E%3C/svg%3E" alt=""> BSC</button>
+            <button class="cpill" data-chain="base"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230052FF'/%3E%3Cpath d='M16 6C10.48 6 6 10.49 6 16.02c0 5.53 4.48 10.02 10.01 10.02 5.21 0 9.52-3.98 9.97-9.06h-6.62c-.42 1.72-1.97 3-3.82 3-2.18 0-3.95-1.78-3.95-3.97 0-2.19 1.77-3.97 3.95-3.97 1.85 0 3.4 1.28 3.82 3H26C25.53 9.98 21.22 6 16 6z' fill='white'/%3E%3C/svg%3E" alt=""> BASE</button>
+            <button class="cpill" data-chain="arbitrum"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%232D374B'/%3E%3Cpath d='M19 10L16 5 7 22l3 1.5 6-10 6 10 3-1.5L19 10z' fill='%2396BEDC'/%3E%3C/svg%3E" alt=""> ARB</button>
           </div>
         </div>
 
-        <div class="cmd-field grow">
-          <div class="cmd-label">Contract address <span style="opacity:.4;font-size:8px;letter-spacing:.04em;text-transform:none">(optional)</span></div>
-          <input type="text" id="contractInput" class="input-contract" placeholder="0x... or Solana token mint address"/>
+        <div class="cf grow">
+          <div class="cf-label">Contract address <span style="opacity:.4;font-size:8px;text-transform:none;letter-spacing:.02em">(optional)</span></div>
+          <input type="text" id="contractInput" placeholder="0x... or Solana token mint address"/>
         </div>
 
-        <button class="btn-execute" id="scanBtn">
+        <button class="btn-go" id="scanBtn">
           <span>Execute</span>
-          <span class="btn-arr">›</span>
+          <span class="btn-go-arr">›</span>
         </button>
       </div>
 
       <div class="stats-strip" id="statsStrip">
-        <div class="stat-cell"><div class="sc-label">Token</div><div class="sc-val" id="scToken">—</div><div class="sc-sub" id="scName"></div></div>
-        <div class="stat-cell"><div class="sc-label">Wallets</div><div class="sc-val" id="scWallets">0</div><div class="sc-sub">top holders</div></div>
-        <div class="stat-cell"><div class="sc-label">Clusters</div><div class="sc-val" id="scClusters">0</div><div class="sc-sub">linked groups</div></div>
-        <div class="stat-cell"><div class="sc-label">Transactions</div><div class="sc-val" id="scTxs">0</div><div class="sc-sub">indexed</div></div>
-        <div class="stat-cell"><div class="sc-label">Network</div><div class="sc-val" id="scChain" style="font-size:14px">—</div><div class="sc-sub" id="scUpdated"></div></div>
+        <div class="sc"><div class="sc-l">Token</div><div class="sc-v" id="scTok">—</div><div class="sc-s" id="scNm"></div></div>
+        <div class="sc"><div class="sc-l">Wallets</div><div class="sc-v" id="scWal">0</div><div class="sc-s">top holders</div></div>
+        <div class="sc"><div class="sc-l">Clusters</div><div class="sc-v" id="scClu">0</div><div class="sc-s">linked groups</div></div>
+        <div class="sc"><div class="sc-l">Transactions</div><div class="sc-v" id="scTx">0</div><div class="sc-s">indexed</div></div>
+        <div class="sc"><div class="sc-l">Network</div><div class="sc-v" id="scChn" style="font-size:14px;padding-top:3px">—</div><div class="sc-s" id="scUpd"></div></div>
       </div>
     </div>
   </div>
 
-  <!-- DEMO ALERT -->
-  <div class="demo-alert" id="demoAlert" style="display:none">
+  <!-- DEMO BANNER -->
+  <div class="demo-banner" id="demoBanner">
     <span>⚠</span>
-    <span>Demo mode — simulated data. <a onclick="openSettings()">Configure API keys</a> for real wallet scanning.</span>
-    <button onclick="this.parentElement.style.display='none'">✕</button>
+    <span>Demo mode — simulated data. <a onclick="openSettings()">Configure API keys</a> for live scanning.</span>
+    <button onclick="this.parentElement.classList.remove('vis')">✕</button>
   </div>
 
   <!-- LOADING -->
-  <div class="loading-state" id="loadingState">
-    <div class="radar-ring">
-      <div class="radar-sweep"></div>
-      <div class="radar-core"></div>
+  <div class="loader" id="loader">
+    <div class="radar">
+      <div class="radar-sw"></div>
+      <div class="radar-dot"></div>
     </div>
-    <div class="load-label" id="loadLabel">Initializing scan...</div>
-    <div class="load-sub" id="loadSub">Connecting to RPC</div>
+    <div class="ld-txt" id="ldTxt">Initializing...</div>
+    <div class="ld-sub" id="ldSub">Connecting to RPC nodes</div>
   </div>
 
-  <!-- TRACKER GRID -->
-  <div class="tracker-grid" id="trackerGrid">
-    <div class="panel fade-in">
-      <div class="panel-head">
-        <div class="panel-accent amber"></div>
-        <div class="panel-title">Wallets <span class="pt-badge" id="walletCount">0</span></div>
-        <div class="panel-tools">
-          <input type="text" class="tool-input" id="walletFilter" placeholder="filter..."/>
-          <select class="tool-select" id="walletSort">
+  <!-- 2-COL GRID -->
+  <div class="grid" id="mainGrid">
+
+    <!-- Wallets panel -->
+    <div class="panel fin">
+      <div class="ph">
+        <div class="ph-bar a"></div>
+        <div class="ph-title">Wallets <span class="ph-badge" id="wCount">0</span></div>
+        <div class="ph-tools">
+          <input type="text" class="ti" id="wFilter" placeholder="filter address..."/>
+          <select class="ti" id="wSort">
             <option value="balance">Balance ↓</option>
             <option value="txcount">Activity ↓</option>
             <option value="buys">Buys ↓</option>
@@ -134,134 +694,589 @@
           </select>
         </div>
       </div>
-      <div class="wallet-scroll" id="walletList">
-        <div class="empty-state">
-          <div class="es-glyph">◈◈◈</div>
-          <div class="es-text">Enter a ticker and press Execute</div>
-          <div class="es-sub">// awaiting command</div>
-        </div>
+      <div class="wscroll" id="wList">
+        <div class="empty"><div class="e-icon">◈◈◈</div><div class="e-txt">Enter a ticker and press Execute</div><div class="e-sub">// awaiting command</div></div>
       </div>
     </div>
 
-    <div class="panel fade-in" style="animation-delay:.06s">
-      <div class="panel-head">
-        <div class="panel-accent cyan"></div>
-        <div class="panel-title">Activity <span class="pt-badge" id="actLabel" style="color:var(--cyan)">select wallet</span></div>
-        <div class="panel-tools">
-          <div class="filter-tabs" id="filterTabs">
-            <button class="ftab on" data-type="all">All</button>
-            <button class="ftab" data-type="buy">Buy</button>
-            <button class="ftab" data-type="sell">Sell</button>
-            <button class="ftab" data-type="swap">Swap</button>
-            <button class="ftab" data-type="transfer">Transfer</button>
+    <!-- Activity panel -->
+    <div class="panel fin" style="animation-delay:.07s">
+      <div class="ph">
+        <div class="ph-bar c"></div>
+        <div class="ph-title">Activity <span class="ph-badge" id="actLbl" style="color:var(--cyan)">select wallet</span></div>
+        <div class="ph-tools">
+          <div class="ftabs" id="ftabs">
+            <button class="ft on" data-type="all">All</button>
+            <button class="ft" data-type="buy">Buy</button>
+            <button class="ft" data-type="sell">Sell</button>
+            <button class="ft" data-type="swap">Swap</button>
+            <button class="ft" data-type="transfer">Transfer</button>
           </div>
         </div>
       </div>
-      <div class="activity-scroll" id="activityList">
-        <div class="empty-state">
-          <div class="es-glyph">[ ]</div>
-          <div class="es-text">Select a wallet to view its transactions</div>
-          <div class="es-sub">// no wallet selected</div>
-        </div>
+      <div class="ascroll" id="aList">
+        <div class="empty"><div class="e-icon">[ ]</div><div class="e-txt">Select a wallet to view transactions</div><div class="e-sub">// no wallet selected</div></div>
       </div>
     </div>
   </div>
 
   <!-- CLUSTERS -->
-  <div class="clusters-shell" id="clustersShell">
-    <div class="panel fade-in">
-      <div class="panel-head">
-        <div class="panel-accent" style="background:var(--purple)"></div>
-        <div class="panel-title">Wallet clusters</div>
-        <span style="font-family:var(--mono);font-size:9px;color:var(--mute);margin-left:4px">// linked address groups detected by on-chain analysis</span>
+  <div class="cv" id="cView">
+    <div class="panel fin">
+      <div class="ph">
+        <div class="ph-bar" style="background:var(--purple)"></div>
+        <div class="ph-title">Wallet clusters</div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:4px">// on-chain link analysis</span>
       </div>
-      <div id="clusterList"></div>
+      <div id="cList"></div>
     </div>
   </div>
 
-</div>
+</div><!-- /shell -->
 
-<!-- SETTINGS MODAL -->
-<div class="modal-veil" id="settingsModal">
-  <div class="modal-box">
-    <div class="modal-head">
+<!-- ── SETTINGS MODAL ── -->
+<div class="mveil" id="modal">
+  <div class="mbox">
+    <div class="mhead">
       <h2>API Configuration</h2>
-      <button class="modal-x" id="modalClose">✕</button>
+      <button class="mclose" id="mClose">✕</button>
     </div>
-    <div class="modal-body">
-      <p class="modal-intro">Keys are stored in your browser's localStorage only — never sent anywhere except the respective API endpoints.</p>
-
-      <div class="api-card">
-        <div class="api-card-head">
-          <span class="api-name">Helius</span>
-          <span class="api-tag">Solana</span>
-          <a href="https://helius.dev" target="_blank" class="api-link">Get free key →</a>
-        </div>
-        <input type="password" class="api-input" id="heliusKey" placeholder="your-helius-api-key"/>
-        <p class="api-note">Free tier: 100k credits/month · Covers ~50 wallets with full tx history</p>
+    <div class="mbody">
+      <p class="mintro">Keys stored in browser localStorage only — never leave your device except when making requests to the respective blockchain APIs.</p>
+      <div class="acard">
+        <div class="acard-hd"><span class="acard-name">Helius</span><span class="acard-tag">Solana</span><a href="https://helius.dev" target="_blank" class="acard-link">Get free key →</a></div>
+        <input type="password" class="ainput" id="heliusKey" placeholder="your-helius-api-key"/>
+        <p class="anote">Free: 100k credits/month · Covers ~50 wallets with full tx history</p>
       </div>
-
-      <div class="api-card">
-        <div class="api-card-head">
-          <span class="api-name">Moralis</span>
-          <span class="api-tag">ETH · BSC · Base · ARB</span>
-          <a href="https://moralis.io" target="_blank" class="api-link">Get free key →</a>
-        </div>
-        <input type="password" class="api-input" id="moralisKey" placeholder="your-moralis-api-key"/>
-        <p class="api-note">Free tier: 40k requests/month · Single key for all EVM chains</p>
+      <div class="acard">
+        <div class="acard-hd"><span class="acard-name">Moralis</span><span class="acard-tag">ETH · BSC · Base · ARB</span><a href="https://moralis.io" target="_blank" class="acard-link">Get free key →</a></div>
+        <input type="password" class="ainput" id="moralisKey" placeholder="your-moralis-api-key"/>
+        <p class="anote">Free: 40k requests/month · One key for all EVM chains</p>
       </div>
-
-      <div class="api-card">
-        <div class="api-card-head">
-          <span class="api-name">Etherscan</span>
-          <span class="api-tag">Ethereum fallback</span>
-          <a href="https://etherscan.io/apis" target="_blank" class="api-link">Get free key →</a>
-        </div>
-        <input type="password" class="api-input" id="etherscanKey" placeholder="your-etherscan-api-key"/>
+      <div class="acard">
+        <div class="acard-hd"><span class="acard-name">Etherscan</span><span class="acard-tag">Ethereum fallback</span><a href="https://etherscan.io/apis" target="_blank" class="acard-link">Get free key →</a></div>
+        <input type="password" class="ainput" id="etherscanKey" placeholder="your-etherscan-api-key"/>
       </div>
-
-      <button class="btn-save" id="saveKeysBtn">Save keys</button>
-      <div class="save-ok" id="saveOk"></div>
+      <button class="btn-save" id="saveBtn">Save keys</button>
+      <div class="saveok" id="saveOk"></div>
     </div>
   </div>
 </div>
 
-<!-- WALLET DRAWER -->
-<div class="drawer-veil" id="drawerVeil"></div>
-<div class="side-drawer" id="sideDrawer">
-  <div class="drawer-header">
-    <div class="d-ring" id="dRing"></div>
-    <div class="dh-body">
-      <div class="dh-addr" id="dAddr">—</div>
-      <div class="dh-meta" id="dMeta">—</div>
+<!-- ── DRAWER ── -->
+<div class="dveil" id="dveil"></div>
+<div class="drawer" id="drawer">
+  <div class="dhdr">
+    <div class="dring" id="dRing"></div>
+    <div class="dbody">
+      <div class="daddr" id="dAddr">—</div>
+      <div class="dmeta" id="dMeta">—</div>
     </div>
-    <button class="drawer-x" id="drawerClose">✕</button>
+    <button class="dclose" id="dClose">✕</button>
   </div>
-  <div class="drawer-kpis" id="dKpis"></div>
-  <div class="drawer-section">
-    <div class="ds-title">Transaction history</div>
-    <div class="drawer-txscroll" id="dTxList"></div>
+  <div class="dkpis" id="dKpis"></div>
+  <div class="dsec">
+    <div class="dstitle">Transaction history</div>
+    <div class="dtscroll" id="dTxs"></div>
   </div>
-  <div class="drawer-section">
-    <div class="ds-title">Linked wallets <span class="ds-badge purple" id="dLinkedBadge">0</span></div>
-    <div id="dLinkedList"></div>
+  <div class="dsec">
+    <div class="dstitle">Linked wallets <span class="dsbadge p" id="dLinkedN">0</span></div>
+    <div id="dLinked"></div>
   </div>
 </div>
 
-<script src="js/api.js"></script>
-<script src="js/cluster.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/app.js"></script>
 <script>
-(function clock() {
-  const el = document.getElementById('sysClock');
-  function tick() {
-    const n = new Date();
-    const pad = x => String(x).padStart(2,'0');
-    if (el) el.textContent = `${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())} UTC`;
+/* ═══════════════════════════════════════════
+   CLOCK
+═══════════════════════════════════════════ */
+(function(){
+  const el = document.getElementById('clk');
+  function t(){
+    const n=new Date(), p=x=>String(x).padStart(2,'0');
+    if(el) el.textContent=`${p(n.getUTCHours())}:${p(n.getUTCMinutes())}:${p(n.getUTCSeconds())} UTC`;
   }
-  tick(); setInterval(tick, 1000);
+  t(); setInterval(t,1000);
 })();
+
+/* ═══════════════════════════════════════════
+   API MODULE
+═══════════════════════════════════════════ */
+const API = (()=>{
+  function getKeys(){ return { helius: localStorage.getItem('cs_helius')||'', moralis: localStorage.getItem('cs_moralis')||'', etherscan: localStorage.getItem('cs_etherscan')||'' }; }
+  function saveKeys(o){ if(o.helius!==undefined) localStorage.setItem('cs_helius',o.helius); if(o.moralis!==undefined) localStorage.setItem('cs_moralis',o.moralis); if(o.etherscan!==undefined) localStorage.setItem('cs_etherscan',o.etherscan); }
+  function hasKey(chain){ const k=getKeys(); return chain==='solana'?!!k.helius:!!k.moralis; }
+  function short(a){ if(!a)return''; return a.length>12?a.slice(0,6)+'…'+a.slice(-4):a; }
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  async function hPost(path,body){
+    const key=getKeys().helius;
+    if(!key) throw new Error('Helius API key missing — open Settings.');
+    const r=await fetch(`https://api.helius.xyz/v0/${path}?api-key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(`Helius ${r.status}`);
+    return r.json();
+  }
+  async function mGet(path,params={},chain='ethereum'){
+    const key=getKeys().moralis;
+    if(!key) throw new Error('Moralis API key missing — open Settings.');
+    const chains={ethereum:'0x1',bsc:'0x38',base:'0x2105',arbitrum:'0xa4b1'};
+    const url=new URL(`https://deep-index.moralis.io/api/v2.2/${path}`);
+    url.searchParams.set('chain',chains[chain]||'0x1');
+    for(const[k,v] of Object.entries(params)) url.searchParams.set(k,String(v));
+    const r=await fetch(url.toString(),{headers:{'X-API-Key':key}});
+    if(!r.ok) throw new Error(`Moralis ${r.status}`);
+    return r.json();
+  }
+
+  async function solanaFindToken(ticker){
+    const r=await fetch('https://token.jup.ag/all'); const list=await r.json();
+    const m=list.find(t=>t.symbol?.toUpperCase()===ticker.toUpperCase());
+    if(m) return{mint:m.address,name:m.name,symbol:m.symbol,decimals:m.decimals};
+    throw new Error(`Token "${ticker}" not found on Solana. Try providing the contract address.`);
+  }
+  async function solanaHolders(mint,limit=50){
+    const d=await hPost('addresses',{query:{tokenAccounts:{mint}},options:{limit,sortBy:{sortBy:'amount',sortOrder:'desc'}}});
+    return(d.result?.token_accounts||[]).map(a=>({address:a.owner,balance:a.amount/Math.pow(10,a.token_data?.decimals||6),chain:'solana'}));
+  }
+  async function solanaTxs(address,mint,onStep){
+    const txs=[]; let before=null,page=0;
+    while(page<4){
+      const params={limit:100,type:'SWAP,TRANSFER'}; if(before) params.before=before;
+      const batch=await hPost(`addresses/${address}/transactions`,{options:params});
+      if(!batch?.length) break;
+      for(const tx of batch){ const p=parseSolTx(tx,address,mint); if(p) txs.push(p); }
+      before=batch[batch.length-1]?.signature; page++;
+      if(onStep) onStep(`Scanning page ${page}…`);
+      if(batch.length<100) break;
+      await sleep(100);
+    }
+    return txs;
+  }
+  function parseSolTx(tx,wallet,mint){
+    if(!tx) return null;
+    const ts=tx.timestamp?new Date(tx.timestamp*1000):new Date();
+    const involvesMint=tx.tokenTransfers?.some(t=>t.mint===mint)||tx.accountData?.some(a=>a.tokenBalanceChanges?.some(c=>c.mint===mint));
+    if(!involvesMint) return null;
+    let type='other',detail='',counterparty=null;
+    if(tx.type==='SWAP'){
+      const into=tx.tokenTransfers?.find(t=>t.toUserAccount===wallet);
+      const outof=tx.tokenTransfers?.find(t=>t.fromUserAccount===wallet);
+      type=outof?.mint===mint?'sell':into?.mint===mint?'buy':'swap';
+      const amt=type==='buy'?into?.tokenAmount:outof?.tokenAmount;
+      detail=type==='buy'?`Bought ${(amt||0).toLocaleString()} tokens`:type==='sell'?`Sold ${(amt||0).toLocaleString()} tokens`:`Swap`;
+    } else if(tx.type==='TRANSFER'){
+      const xfer=tx.tokenTransfers?.find(t=>t.mint===mint);
+      if(xfer){
+        type='transfer'; counterparty=xfer.fromUserAccount===wallet?xfer.toUserAccount:xfer.fromUserAccount;
+        const dir=xfer.fromUserAccount===wallet?'→':'←';
+        detail=`${dir} ${short(counterparty)}  ${(xfer.tokenAmount||0).toLocaleString()} tokens`;
+      }
+    }
+    const nativeChange=tx.accountData?.find(a=>a.account===wallet)?.nativeBalanceChange||0;
+    return{sig:tx.signature||'',type,ts,detail,counterparty,valueSOL:Math.abs(nativeChange/1e9),explorerUrl:`https://solscan.io/tx/${tx.signature||''}`,chain:'solana'};
+  }
+
+  async function evmFindToken(ticker,chain){
+    const d=await mGet('erc20/metadata',{symbols:[ticker]},chain);
+    const list=Array.isArray(d)?d:(d.result||[]);
+    if(!list.length) throw new Error(`Token "${ticker}" not found on ${chain}.`);
+    const m=list.find(t=>t.symbol?.toUpperCase()===ticker.toUpperCase())||list[0];
+    return{address:m.address,name:m.name,symbol:m.symbol};
+  }
+  async function evmHolders(contract,chain,limit=50){
+    const d=await mGet(`erc20/${contract}/owners`,{limit},chain);
+    return(d.result||[]).map(h=>({address:h.owner_address,balance:parseFloat(h.balance_formatted||0),usdValue:parseFloat(h.usd_value||0),chain}));
+  }
+  async function evmTxs(address,contract,chain,onStep){
+    const txs=[]; let cursor=null,page=0;
+    while(page<4){
+      const params={limit:100,'contract_addresses[0]':contract}; if(cursor) params.cursor=cursor;
+      const d=await mGet(`${address}/erc20/transfers`,params,chain);
+      for(const tx of (d.result||[])) txs.push(parseEvmTx(tx,address));
+      cursor=d.cursor; page++;
+      if(onStep) onStep(`Scanning page ${page}…`);
+      if(!cursor||d.result?.length<100) break;
+      await sleep(120);
+    }
+    return txs;
+  }
+  function parseEvmTx(tx,wallet){
+    const isOut=tx.from_address?.toLowerCase()===wallet.toLowerCase();
+    const amount=parseFloat(tx.value_decimal||0);
+    const cp=isOut?tx.to_address:tx.from_address;
+    return{sig:tx.transaction_hash,type:'transfer',ts:new Date(tx.block_timestamp),detail:`${isOut?'→':'←'} ${short(cp)}  ${amount.toLocaleString(undefined,{maximumFractionDigits:4})} ${tx.token_symbol||''}`,counterparty:cp,valueUSD:parseFloat(tx.value_usd||0),explorerUrl:`https://etherscan.io/tx/${tx.transaction_hash}`,chain:tx.chain||'ethereum'};
+  }
+
+  async function scanToken({ticker,contractAddress,chain,onStep,onWalletDone}){
+    onStep('Resolving token…');
+    let info;
+    if(chain==='solana'){ info=contractAddress?{mint:contractAddress,symbol:ticker,name:ticker}:await solanaFindToken(ticker); }
+    else { info=contractAddress?{address:contractAddress,symbol:ticker,name:ticker}:await evmFindToken(ticker,chain); }
+    onStep('Fetching top holders…');
+    const holders=chain==='solana'?await solanaHolders(info.mint):await evmHolders(info.address,chain);
+    if(!holders.length) throw new Error('No holders found for this token.');
+    const wallets=[];
+    for(let i=0;i<holders.length;i++){
+      const h=holders[i];
+      onStep(`Scanning wallet ${i+1}/${holders.length}…`);
+      let txs=[];
+      try{ txs=chain==='solana'?await solanaTxs(h.address,info.mint,onStep):await evmTxs(h.address,info.address,chain,onStep); }
+      catch(e){ console.warn('tx fail',e); }
+      const w={...h,txs,buys:txs.filter(t=>t.type==='buy').length,sells:txs.filter(t=>t.type==='sell').length,transfers:txs.filter(t=>t.type==='transfer').length,swaps:txs.filter(t=>t.type==='swap').length,counterparties:[...new Set(txs.map(t=>t.counterparty).filter(Boolean))]};
+      wallets.push(w);
+      if(onWalletDone) onWalletDone(w,i,holders.length);
+      await sleep(80);
+    }
+    return{tokenInfo:info,wallets};
+  }
+
+  function generateMockData(ticker,chain){
+    const now=Date.now();
+    const wallets=Array.from({length:20},(_,i)=>{
+      const addr=chain==='solana'
+        ?Array.from({length:44},()=>'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[Math.floor(Math.random()*58)]).join('')
+        :'0x'+Array.from({length:40},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join('');
+      const txTypes=['buy','sell','swap','transfer'];
+      const txs=Array.from({length:Math.floor(Math.random()*35)+3},()=>{
+        const type=txTypes[Math.floor(Math.random()*txTypes.length)];
+        const amt=(Math.random()*800000+500).toFixed(0);
+        return{sig:Math.random().toString(36).slice(2).repeat(3),type,ts:new Date(now-Math.random()*30*864e5),detail:type==='buy'?`Bought ${Number(amt).toLocaleString()} ${ticker}`:type==='sell'?`Sold ${Number(amt).toLocaleString()} ${ticker}`:type==='swap'?`Swapped ${Number(amt).toLocaleString()} ${ticker}`:` → ${short(addr)} ${Number(amt).toLocaleString()} ${ticker}`,valueSOL:(Math.random()*12).toFixed(3),valueUSD:(Math.random()*6000).toFixed(2),explorerUrl:chain==='solana'?'https://solscan.io':'https://etherscan.io',counterparty:Math.random()>.6?wallets?.[Math.floor(Math.random()*Math.max(1,i))]?.address||null:null,chain};
+      });
+      return{address:addr,balance:Math.floor(Math.random()*60000000+500),chain,txs,buys:txs.filter(t=>t.type==='buy').length,sells:txs.filter(t=>t.type==='sell').length,transfers:txs.filter(t=>t.type==='transfer').length,swaps:txs.filter(t=>t.type==='swap').length,counterparties:[],clusterColor:null,clusterId:null};
+    });
+    wallets.sort((a,b)=>b.balance-a.balance);
+    return{tokenInfo:{symbol:ticker,name:ticker+' Token',mint:'demo'},wallets};
+  }
+
+  return{getKeys,saveKeys,hasKey,scanToken,generateMockData,short};
+})();
+
+/* ═══════════════════════════════════════════
+   CLUSTER ENGINE
+═══════════════════════════════════════════ */
+const Cluster = (()=>{
+  const COLORS=['#f5a623','#00e87a','#00d4ff','#a855f7','#ff6b35','#22d3ee','#f43f5e','#84cc16','#fb923c','#818cf8'];
+  function buildClusters(wallets){
+    if(!wallets?.length) return wallets;
+    const addrSet=new Set(wallets.map(w=>w.address));
+    const parent={},rank={};
+    for(const w of wallets){parent[w.address]=w.address;rank[w.address]=0;}
+    function find(x){if(parent[x]!==x)parent[x]=find(parent[x]);return parent[x];}
+    function union(x,y){const px=find(x),py=find(y);if(px===py)return;if(rank[px]<rank[py])parent[px]=py;else if(rank[px]>rank[py])parent[py]=px;else{parent[py]=px;rank[px]++;}}
+    const reasons={};
+    function link(a,b,why){
+      if(!addrSet.has(a)||!addrSet.has(b))return;
+      union(a,b);
+      if(!reasons[a])reasons[a]=[];if(!reasons[b])reasons[b]=[];
+      reasons[a].push({other:b,reason:why});
+      reasons[b].push({other:a,reason:why});
+    }
+    // Rule 1: direct transfers
+    for(const w of wallets) for(const tx of(w.txs||[])) if(tx.type==='transfer'&&tx.counterparty&&addrSet.has(tx.counterparty)) link(w.address,tx.counterparty,'direct transfer');
+    // Rule 2: shared external counterparty
+    const extMap={};
+    for(const w of wallets) for(const cp of(w.counterparties||[])) if(!addrSet.has(cp)){if(!extMap[cp])extMap[cp]=[];extMap[cp].push(w.address);}
+    for(const[,addrs] of Object.entries(extMap)) if(addrs.length>=2) for(let i=0;i<addrs.length-1;i++) link(addrs[i],addrs[i+1],'shared counterparty');
+    // Rule 3: synchronized buys
+    for(let i=0;i<wallets.length;i++) for(let j=i+1;j<wallets.length;j++){
+      const aT=(wallets[i].txs||[]).filter(t=>t.type==='buy').map(t=>t.ts?.getTime()).sort();
+      const bT=(wallets[j].txs||[]).filter(t=>t.type==='buy').map(t=>t.ts?.getTime()).sort();
+      if(aT.length<2||bT.length<2)continue;
+      let m=0;
+      for(const at of aT) for(const bt of bT) if(Math.abs(at-bt)<60000){m++;break;}
+      if(m>=2) link(wallets[i].address,wallets[j].address,`${m} synced buys`);
+    }
+    const rootId={};let nid=0;
+    for(const w of wallets){const r=find(w.address);if(!(r in rootId))rootId[r]=nid++;}
+    const sizes={};
+    for(const w of wallets){const c=rootId[find(w.address)];sizes[c]=(sizes[c]||0)+1;}
+    for(const w of wallets){
+      const c=rootId[find(w.address)];const alone=sizes[c]===1;
+      w.clusterId=alone?null:c;
+      w.clusterColor=alone?null:COLORS[c%COLORS.length];
+      w.linkedWallets=(reasons[w.address]||[]).filter(l=>addrSet.has(l.other));
+    }
+    return wallets;
+  }
+  function getClusters(wallets){
+    const map={};
+    for(const w of wallets){if(w.clusterId===null)continue;if(!map[w.clusterId])map[w.clusterId]=[];map[w.clusterId].push(w);}
+    return Object.entries(map).map(([id,members])=>({id:+id,color:members[0].clusterColor,members:members.sort((a,b)=>(b.balance||0)-(a.balance||0)),size:members.length}));
+  }
+  return{buildClusters,getClusters};
+})();
+
+/* ═══════════════════════════════════════════
+   UI RENDERER
+═══════════════════════════════════════════ */
+const UI = (()=>{
+  const ICONS={buy:'↑',sell:'↓',swap:'⇄',transfer:'→',other:'·'};
+  function fmt(n,d=0){if(n==null)return'—';return Number(n).toLocaleString(undefined,{maximumFractionDigits:d});}
+  function fmtTime(ts){
+    if(!ts)return'—';const d=ts instanceof Date?ts:new Date(ts);
+    const diff=(Date.now()-d)/1000;
+    if(diff<60)return`${Math.floor(diff)}s ago`;
+    if(diff<3600)return`${Math.floor(diff/60)}m ago`;
+    if(diff<86400)return`${Math.floor(diff/3600)}h ago`;
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }
+
+  function renderWallets(wallets,activeAddr,filter='',sort='balance',all){
+    const el=document.getElementById('wList');
+    document.getElementById('wCount').textContent=wallets.length;
+    if(!wallets.length){el.innerHTML=empty('◈◈◈','No wallets found','// empty');return;}
+    let list=filter?wallets.filter(w=>w.address.toLowerCase().includes(filter.toLowerCase())):[...wallets];
+    list.sort((a,b)=>{
+      if(sort==='balance')return(b.balance||0)-(a.balance||0);
+      if(sort==='txcount')return(b.txs?.length||0)-(a.txs?.length||0);
+      if(sort==='buys')return(b.buys||0)-(a.buys||0);
+      if(sort==='sells')return(b.sells||0)-(a.sells||0);
+      return 0;
+    });
+    let h='';
+    for(let i=0;i<list.length;i++){
+      const w=list[i],act=w.address===activeAddr;
+      const dc=w.clusterColor||'var(--sub)';
+      h+=`<div class="wr${act?' sel':''}" data-addr="${w.address}">`;
+      h+=`<span class="wr-n">${i+1}</span>`;
+      h+=`<span class="wr-dot${w.clusterColor?' glow':''}" style="background:${dc};color:${dc}"></span>`;
+      h+=`<span class="wr-addr">${API.short(w.address)}</span>`;
+      h+=`<span class="wr-bal">${fmt(w.balance)}</span>`;
+      h+=`<span class="wr-tags">${w.buys?`<span class="tt b">B${w.buys}</span>`:''}${w.sells?`<span class="tt s">S${w.sells}</span>`:''}${w.swaps?`<span class="tt w">⇄${w.swaps}</span>`:''}</span>`;
+      if(w.linkedWallets?.length) h+=`<button class="wr-exp" data-addr="${w.address}">▾${w.linkedWallets.length}</button>`;
+      h+=`</div>`;
+      if(act&&w.linkedWallets?.length){
+        h+=`<div class="wc-block" id="wc-${w.address}">`;
+        for(const lk of w.linkedWallets){
+          const f=all?.find(x=>x.address===lk.other);
+          h+=`<div class="wc" data-addr="${lk.other}"><span class="wc-addr">${lk.other}</span><span class="wc-why">${lk.reason}</span><span class="wc-bal">${f?fmt(f.balance):'—'}</span></div>`;
+        }
+        h+=`</div>`;
+      }
+    }
+    el.innerHTML=h;
+  }
+
+  function renderActivity(txs,filter='all'){
+    const el=document.getElementById('aList');
+    if(!txs?.length){el.innerHTML=empty('[ ]','No transactions found','// clean');return;}
+    let list=filter==='all'?[...txs]:txs.filter(t=>t.type===filter);
+    list.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    if(!list.length){el.innerHTML=empty('[ ]',`No ${filter} transactions`,'// filtered empty');return;}
+    el.innerHTML=list.map(txRow).join('');
+  }
+
+  function txRow(tx){
+    const icon=ICONS[tx.type]||'·';
+    const hash=tx.sig?tx.sig.slice(0,8)+'…':'';
+    const val=tx.valueUSD?'$'+Number(tx.valueUSD).toLocaleString(undefined,{maximumFractionDigits:2}):tx.valueSOL?Number(tx.valueSOL).toFixed(3)+' SOL':'';
+    return`<div class="txr"><div class="txbadge ${tx.type}">${icon}</div><div><div class="txkind ${tx.type}">${tx.type.toUpperCase()}</div><div class="txdesc">${tx.detail||'—'}</div></div><div class="txright"><div class="txtime">${fmtTime(tx.ts)}</div>${val?`<div class="txval">${val}</div>`:''} ${tx.explorerUrl?`<a href="${tx.explorerUrl}" target="_blank" class="txlink">${hash}</a>`:''}</div></div>`;
+  }
+
+  function renderClusters(wallets){
+    const el=document.getElementById('cList');
+    const clusters=Cluster.getClusters(wallets);
+    if(!clusters.length){el.innerHTML=`<div style="padding:50px 0">${empty('◎','No clusters detected','// run a scan first')}</div>`;return;}
+    el.innerHTML=clusters.map(c=>{
+      const reasons=[...new Set(c.members.flatMap(m=>(m.linkedWallets||[]).map(l=>l.reason)))].slice(0,2).join(', ');
+      return`<div class="cblock"><div class="chead"><span class="corb" style="background:${c.color};color:${c.color}"></span><span class="cname">Cluster #${c.id}</span><span class="cbadge">${c.size} wallets</span>${reasons?`<span class="cwhy">${reasons}</span>`:''}</div><div class="crows">${c.members.map((w,i)=>`<div class="crow" data-addr="${w.address}">${i===0?'<span class="crow-main">MAIN</span>':''}<span class="crow-addr">${w.address}</span><span class="crow-bal">${fmt(w.balance)}</span></div>`).join('')}</div></div>`;
+    }).join('');
+  }
+
+  function openDrawer(wallet,all){
+    document.getElementById('dAddr').textContent=wallet.address;
+    document.getElementById('dMeta').textContent=(wallet.chain||'').toUpperCase()+(wallet.clusterId!==null?` · Cluster #${wallet.clusterId}`:' · No cluster');
+    const ring=document.getElementById('dRing');
+    ring.style.background=wallet.clusterColor||'var(--sub)';
+    if(wallet.clusterColor) ring.style.boxShadow=`0 0 7px ${wallet.clusterColor}`;
+    document.getElementById('dKpis').innerHTML=`<div class="dkpi"><div class="dkl">Balance</div><div class="dkv">${fmt(wallet.balance)}</div></div><div class="dkpi"><div class="dkl">Total txs</div><div class="dkv">${(wallet.txs||[]).length}</div></div><div class="dkpi"><div class="dkl">Buys / Sells</div><div class="dkv" style="font-size:14px">${wallet.buys||0} / ${wallet.sells||0}</div></div><div class="dkpi"><div class="dkl">Cluster</div><div class="dkv" style="font-size:14px;color:${wallet.clusterColor||'var(--muted)'}">${wallet.clusterId!==null?'#'+wallet.clusterId:'None'}</div></div>`;
+    const txH=(wallet.txs||[]).length?[...wallet.txs].sort((a,b)=>(b.ts||0)-(a.ts||0)).map(txRow).join(''):empty('[ ]','No transactions','');
+    document.getElementById('dTxs').innerHTML=txH;
+    const linked=wallet.linkedWallets||[];
+    document.getElementById('dLinkedN').textContent=linked.length;
+    document.getElementById('dLinked').innerHTML=linked.length?linked.map(l=>{const f=all?.find(w=>w.address===l.other);return`<div class="lrow" data-addr="${l.other}"><span class="lrow-addr">${l.other}</span><span class="lrow-why">${l.reason}</span><span class="lrow-bal">${f?fmt(f.balance):'—'}</span></div>`;}).join(''):`<p style="font-family:var(--mono);font-size:10px;color:var(--sub)">No linked wallets detected</p>`;
+    document.getElementById('dveil').classList.add('vis');
+    document.getElementById('drawer').classList.add('vis');
+  }
+  function closeDrawer(){document.getElementById('dveil').classList.remove('vis');document.getElementById('drawer').classList.remove('vis');}
+
+  function empty(icon,txt,sub){return`<div class="empty"><div class="e-icon">${icon}</div><div class="e-txt">${txt}</div><div class="e-sub">${sub}</div></div>`;}
+
+  return{renderWallets,renderActivity,renderClusters,openDrawer,closeDrawer,txRow,fmtTime};
+})();
+
+/* ═══════════════════════════════════════════
+   APP CONTROLLER
+═══════════════════════════════════════════ */
+const App = (()=>{
+  let S={wallets:[],tokenInfo:null,active:null,chain:'solana',txF:'all',wF:'',wS:'balance',view:'tracker'};
+  const $=id=>document.getElementById(id);
+
+  function syncPill(){
+    const k=API.getKeys(),ok=!!(k.helius||k.moralis);
+    const p=$('apipill'); p.className='apipill '+(ok?'good':'bad');
+    $('apilabel').textContent=ok?'API ready':'No API key';
+  }
+
+  function init(){
+    syncPill();
+    // nav
+    document.querySelectorAll('.ntab').forEach(t=>t.addEventListener('click',()=>setView(t.dataset.view)));
+    $('apipill').addEventListener('click',openSettings);
+    // chains
+    document.querySelectorAll('.cpill').forEach(p=>p.addEventListener('click',()=>{document.querySelectorAll('.cpill').forEach(x=>x.classList.remove('on'));p.classList.add('on');S.chain=p.dataset.chain;}));
+    // scan
+    $('scanBtn').addEventListener('click',startScan);
+    $('tickerInput').addEventListener('keydown',e=>{if(e.key==='Enter')startScan();});
+    // wallet list
+    $('wList').addEventListener('click',e=>{
+      const exp=e.target.closest('.wr-exp');
+      if(exp){e.stopPropagation();const a=exp.dataset.addr;const ex=document.getElementById('wc-'+a);if(ex)ex.remove();else UI.renderWallets(S.wallets,a,S.wF,S.wS,S.wallets);return;}
+      const row=e.target.closest('[data-addr]');
+      if(row) selectWallet(row.dataset.addr);
+    });
+    // filter tabs
+    document.querySelectorAll('.ft').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.ft').forEach(x=>x.classList.remove('on'));b.classList.add('on');S.txF=b.dataset.type;if(S.active)UI.renderActivity(S.active.txs,S.txF);}));
+    // wallet filter/sort
+    $('wFilter').addEventListener('input',e=>{S.wF=e.target.value;UI.renderWallets(S.wallets,S.active?.address,S.wF,S.wS,S.wallets);});
+    $('wSort').addEventListener('change',e=>{S.wS=e.target.value;UI.renderWallets(S.wallets,S.active?.address,S.wF,S.wS,S.wallets);});
+    // drawer
+    $('dClose').addEventListener('click',UI.closeDrawer);
+    $('dveil').addEventListener('click',UI.closeDrawer);
+    $('dLinked').addEventListener('click',e=>{const r=e.target.closest('[data-addr]');if(r){UI.closeDrawer();selectWallet(r.dataset.addr);}});
+    // clusters
+    $('cList').addEventListener('click',e=>{const r=e.target.closest('[data-addr]');if(r){setView('tracker');selectWallet(r.dataset.addr);}});
+    // modal
+    $('mClose').addEventListener('click',closeSettings);
+    $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeSettings();});
+    $('saveBtn').addEventListener('click',saveKeys);
+    // restore
+    restoreSession();
+  }
+
+  function setView(v){
+    if(v==='settings'){openSettings();return;}
+    S.view=v;
+    document.querySelectorAll('.ntab').forEach(t=>t.classList.toggle('on',t.dataset.view===v));
+    $('mainGrid').className='grid'+(S.wallets.length&&v==='tracker'?' vis':'');
+    $('cView').className='cv'+(v==='clusters'?' vis':'');
+    if(v==='clusters'&&S.wallets.length) UI.renderClusters(S.wallets);
+  }
+
+  function openSettings(){
+    const k=API.getKeys();
+    if(k.helius)$('heliusKey').value=k.helius;
+    if(k.moralis)$('moralisKey').value=k.moralis;
+    if(k.etherscan)$('etherscanKey').value=k.etherscan;
+    $('modal').classList.add('vis');
+  }
+  function closeSettings(){$('modal').classList.remove('vis');}
+  function saveKeys(){
+    API.saveKeys({helius:$('heliusKey').value.trim(),moralis:$('moralisKey').value.trim(),etherscan:$('etherscanKey').value.trim()});
+    $('saveOk').textContent='✓ Saved';
+    setTimeout(()=>$('saveOk').textContent='',2500);
+    syncPill(); closeSettings();
+  }
+
+  async function startScan(){
+    const ticker=$('tickerInput').value.trim().toUpperCase();
+    const contract=$('contractInput').value.trim();
+    if(!ticker&&!contract){alert('Enter a token ticker or contract address.');return;}
+    if(!API.hasKey(S.chain)){
+      const demo=confirm(`No API key for ${S.chain.toUpperCase()}.\n\nRun DEMO MODE with simulated data?\n(Cancel → configure keys in Settings)`);
+      if(!demo){openSettings();return;}
+      runDemo(ticker||'DEMO');return;
+    }
+    await runLive(ticker,contract,S.chain);
+  }
+
+  function runDemo(ticker){
+    showLoader(true,'Generating demo data…');
+    $('demoBanner').classList.add('vis');
+    setTimeout(()=>{
+      const{tokenInfo,wallets}=API.generateMockData(ticker,S.chain);
+      Cluster.buildClusters(wallets);
+      finish(tokenInfo,wallets);
+    },1400);
+  }
+
+  async function runLive(ticker,contract,chain){
+    showLoader(true,'Resolving token…');
+    $('demoBanner').classList.remove('vis');
+    try{
+      const r=await API.scanToken({ticker,contractAddress:contract,chain,onStep:m=>{$('ldTxt').textContent=m;},onWalletDone:(w,i,tot)=>{$('ldTxt').textContent=`Scanning ${i+1}/${tot}`;$('ldSub').textContent=API.short(w.address)+` — ${w.txs?.length||0} txs`;}});
+      Cluster.buildClusters(r.wallets);
+      finish(r.tokenInfo,r.wallets);
+    }catch(e){showLoader(false);alert('Scan error: '+e.message);}
+  }
+
+  function finish(tokenInfo,wallets){
+    S.tokenInfo=tokenInfo; S.wallets=wallets; S.active=wallets[0]||null;
+    const clusters=Cluster.getClusters(wallets);
+    const totalTxs=wallets.reduce((s,w)=>s+(w.txs?.length||0),0);
+    $('scTok').textContent=tokenInfo?.symbol||'—';
+    $('scNm').textContent=tokenInfo?.name||'';
+    $('scWal').textContent=wallets.length;
+    $('scClu').textContent=clusters.length;
+    $('scTx').textContent=totalTxs.toLocaleString();
+    $('scChn').textContent=S.chain.toUpperCase();
+    $('scUpd').textContent='just now';
+    $('statsStrip').classList.add('vis');
+    saveSession(tokenInfo,wallets);
+    showLoader(false);
+    $('mainGrid').classList.add('vis');
+    $('cView').classList.remove('vis');
+    document.querySelectorAll('.ntab').forEach(t=>t.classList.toggle('on',t.dataset.view==='tracker'));
+    UI.renderWallets(wallets,S.active?.address,'','balance',wallets);
+    if(S.active){$('actLbl').textContent=API.short(S.active.address);UI.renderActivity(S.active.txs,'all');}
+  }
+
+  function selectWallet(addr){
+    const w=S.wallets.find(x=>x.address===addr);
+    if(!w)return;
+    S.active=w;
+    UI.renderWallets(S.wallets,addr,S.wF,S.wS,S.wallets);
+    $('actLbl').textContent=API.short(addr);
+    UI.renderActivity(w.txs,S.txF);
+    document.querySelectorAll('.ft').forEach(b=>b.classList.toggle('on',b.dataset.type==='all'));
+    S.txF='all';
+    $('aList').scrollTop=0;
+  }
+
+  function showLoader(on,msg=''){
+    $('loader').className='loader'+(on?' vis':'');
+    if(on){$('ldTxt').textContent=msg;$('ldSub').textContent='';$('mainGrid').classList.remove('vis');}
+    $('scanBtn').disabled=on;
+  }
+
+  function saveSession(info,wallets){
+    try{localStorage.setItem('cs_sess',JSON.stringify({info,chain:S.chain,wallets:wallets.map(w=>({...w,txs:(w.txs||[]).slice(0,80)})),ts:Date.now()}));}catch(_){}
+  }
+  function restoreSession(){
+    try{
+      const raw=localStorage.getItem('cs_sess'); if(!raw)return;
+      const s=JSON.parse(raw);
+      if(!s?.wallets?.length||Date.now()-s.ts>30*60000)return;
+      s.wallets.forEach(w=>{w.txs=(w.txs||[]).map(t=>({...t,ts:new Date(t.ts)}));});
+      Cluster.buildClusters(s.wallets);
+      S.tokenInfo=s.info; S.wallets=s.wallets; S.chain=s.chain||'solana'; S.active=s.wallets[0];
+      if(s.info?.symbol)$('tickerInput').value=s.info.symbol;
+      const clusters=Cluster.getClusters(s.wallets);
+      const totalTxs=s.wallets.reduce((acc,w)=>acc+(w.txs?.length||0),0);
+      $('scTok').textContent=s.info?.symbol||'—';$('scNm').textContent=s.info?.name||'';
+      $('scWal').textContent=s.wallets.length;$('scClu').textContent=clusters.length;
+      $('scTx').textContent=totalTxs.toLocaleString();$('scChn').textContent=(s.chain||'').toUpperCase();
+      $('scUpd').textContent='restored';$('statsStrip').classList.add('vis');
+      $('mainGrid').classList.add('vis');
+      UI.renderWallets(s.wallets,S.active?.address,'','balance',s.wallets);
+      if(S.active){$('actLbl').textContent=API.short(S.active.address);UI.renderActivity(S.active.txs,'all');}
+    }catch(_){}
+  }
+
+  return{init,openSettings};
+})();
+
+function openSettings(){App.openSettings();}
+document.addEventListener('DOMContentLoaded',()=>App.init());
 </script>
 </body>
 </html>
