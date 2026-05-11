@@ -79,6 +79,7 @@ body::after{content:'';position:fixed;inset:0;z-index:9000;pointer-events:none;b
 
 /* ── DEPTH CONTROL ── */
 .depth-cf{display:flex;flex-direction:column;gap:6px;min-width:240px}
+.controls-row{display:flex;gap:13px;flex-wrap:wrap;align-items:flex-end}
 .depth-lbl-row{display:flex;align-items:center;justify-content:space-between}
 .depth-val{font-size:11px;color:var(--am);font-weight:500}
 .depth-row{display:flex;align-items:center;gap:9px}
@@ -369,15 +370,26 @@ select.ti{cursor:pointer}
         <input id="contract" type="text" placeholder="0x... or token mint address"/>
       </div>
 
-      <!-- DEPTH CONTROL -->
-      <div class="depth-cf">
-        <div class="lbl">Scan depth — <span id="depthLbl" style="color:var(--am);opacity:1;text-transform:none;letter-spacing:.02em">3 pages per wallet</span></div>
-        <div class="depth-row">
-          <input type="range" class="dslider" id="dslider" min="1" max="20" value="3" oninput="onDepth(this.value)"/>
-          <span class="depth-val" id="dval">3</span>
-          <button class="inf-btn" id="infBtn" onclick="toggleInf()">∞ Max</button>
+      <!-- DEPTH + HOLDERS CONTROLS -->
+      <div class="controls-row">
+        <div class="depth-cf">
+          <div class="lbl">Tx depth — <span id="depthLbl" style="color:var(--am);opacity:1;text-transform:none;letter-spacing:.02em">3 pages per wallet</span></div>
+          <div class="depth-row">
+            <input type="range" class="dslider" id="dslider" min="1" max="20" value="3" oninput="onDepth(this.value)"/>
+            <span class="depth-val" id="dval">3</span>
+            <button class="inf-btn" id="infBtn" onclick="toggleInf()">∞ Max</button>
+          </div>
+          <div class="depth-hint">1 page = 100 txs &nbsp;·&nbsp; ∞ = full history</div>
         </div>
-        <div class="depth-hint">1 page = 100 txs per wallet &nbsp;·&nbsp; ∞ = full history (slow)</div>
+        <div class="depth-cf">
+          <div class="lbl">Holders to scan — <span id="holdersLbl" style="color:var(--am);opacity:1;text-transform:none;letter-spacing:.02em">top 20%</span></div>
+          <div class="depth-row">
+            <input type="range" class="dslider" id="hslider" min="1" max="100" value="20" oninput="onHolders(this.value)"/>
+            <span class="depth-val" id="hval">20%</span>
+            <button class="inf-btn" id="hallBtn" onclick="toggleAll()">All</button>
+          </div>
+          <div class="depth-hint" id="holdersHint">≈ top 10 of 50 holders &nbsp;·&nbsp; All = scan every holder</div>
+        </div>
       </div>
 
       <button class="btn-scan" id="scanBtn">
@@ -545,27 +557,46 @@ select.ti{cursor:pointer}
    DEPTH CONTROL
 ══════════════════════════════════════════════════════ */
 let depthInf=false;
+let holdersAll=false;
+// total holders fetched on last resolve (updated after fetch)
+let _totalHolders=50;
+
+function sliderBg(el,pct){
+  el.style.background=`linear-gradient(to right,var(--am) 0%,var(--am) ${pct}%,var(--bg4) ${pct}%,var(--bg4) 100%)`;
+}
 
 function onDepth(v){
   document.getElementById('dval').textContent=v;
   document.getElementById('depthLbl').textContent=v+' pages per wallet';
   depthInf=false;
   document.getElementById('infBtn').classList.remove('on');
-  // update gradient fill on slider
-  const s=document.getElementById('dslider');
-  s.style.background=`linear-gradient(to right,var(--am) 0%,var(--am) ${(v-1)/19*100}%,var(--bg4) ${(v-1)/19*100}%,var(--bg4) 100%)`;
+  sliderBg(document.getElementById('dslider'),(v-1)/19*100);
 }
-
 function toggleInf(){
   depthInf=!depthInf;
   document.getElementById('infBtn').classList.toggle('on',depthInf);
   document.getElementById('dval').textContent=depthInf?'∞':document.getElementById('dslider').value;
   document.getElementById('depthLbl').textContent=depthInf?'full history (may be slow)':'pages per wallet';
 }
+function getDepth(){return depthInf?99999:parseInt(document.getElementById('dslider').value);}
 
-function getDepth(){
-  return depthInf?99999:parseInt(document.getElementById('dslider').value);
+function onHolders(v){
+  holdersAll=false;
+  document.getElementById('hallBtn').classList.remove('on');
+  document.getElementById('hval').textContent=v+'%';
+  document.getElementById('holdersLbl').textContent='top '+v+'%';
+  sliderBg(document.getElementById('hslider'),v-1);
+  const n=Math.max(1,Math.round(_totalHolders*v/100));
+  document.getElementById('holdersHint').textContent=`≈ top ${n} of ${_totalHolders} holders  ·  All = scan every holder`;
 }
+function toggleAll(){
+  holdersAll=!holdersAll;
+  document.getElementById('hallBtn').classList.toggle('on',holdersAll);
+  document.getElementById('hval').textContent=holdersAll?'100%':document.getElementById('hslider').value+'%';
+  document.getElementById('holdersLbl').textContent=holdersAll?'all holders':'top '+document.getElementById('hslider').value+'%';
+  sliderBg(document.getElementById('hslider'),holdersAll?99:document.getElementById('hslider').value-1);
+}
+function getHoldersPct(){return holdersAll?100:parseInt(document.getElementById('hslider').value);}
 
 /* ══════════════════════════════════════════════════════
    API MODULE
@@ -841,7 +872,7 @@ const API=(()=>{
   /* ────────────────────────────────────────────────
      MAIN SCAN — orchestrates everything
   ──────────────────────────────────────────────── */
-  async function scanToken({ticker,contractAddress,chain,maxPages,onStep,onProgress,onWalletDone}){
+  async function scanToken({ticker,contractAddress,chain,maxPages,holdersPct=100,onStep,onProgress,onWalletDone}){
     onStep('Resolving token…');
     let info;
     if(chain==='solana'){
@@ -854,11 +885,15 @@ const API=(()=>{
         :await evmFindToken(ticker,chain);
     }
 
-    onStep('Fetching top holders…');
-    const holders=chain==='solana'
+    onStep('Fetching holders…');
+    const allHolders=chain==='solana'
       ?await solTopHolders(info.mint)
       :await evmTopHolders(info.address,chain);
-    if(!holders.length)throw new Error('No holders found. Check the token address.');
+    if(!allHolders.length)throw new Error('No holders found. Check the token address.');
+    // slice by % — always at least 1
+    const take=Math.max(1,Math.round(allHolders.length*Math.min(holdersPct,100)/100));
+    const holders=allHolders.slice(0,take);
+    onStep(`Scanning top ${take} of ${allHolders.length} holders (${holdersPct}%)…`);
 
     const wallets=[];
     for(let i=0;i<holders.length;i++){
@@ -910,11 +945,13 @@ const API=(()=>{
   }
 
   /* ── MOCK DATA (demo mode) ── */
-  function generateMock(ticker,chain){
+  function generateMock(ticker,chain,holdersPct=100){
     const now=Date.now();
     const rnd=()=>Math.random();
+    const totalPool=24;
+    const take=Math.max(3,Math.round(totalPool*holdersPct/100));
     // generate addresses
-    const addrs=Array.from({length:24},(_,i)=>
+    const addrs=Array.from({length:take},(_,i)=>
       chain==='solana'
         ?Array.from({length:44},()=>'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[Math.floor(rnd()*58)]).join('')
         :'0x'+Array.from({length:40},()=>'0123456789abcdef'[Math.floor(rnd()*16)]).join('')
@@ -1448,8 +1485,9 @@ const App=(()=>{
   function runDemo(ticker){
     showLoader(true,'Generating demo scenario…');
     $('demoBanner').classList.add('v');
+    const pct=getHoldersPct();
     setTimeout(()=>{
-      const{tokenInfo,wallets:ws}=API.generateMock(ticker,chain);
+      const{tokenInfo,wallets:ws}=API.generateMock(ticker,chain,pct);
       LinkEngine.build(ws);
       finish(tokenInfo,ws,getDepth(),true);
     },1500);
@@ -1459,9 +1497,10 @@ const App=(()=>{
     showLoader(true,'Resolving token…');
     $('demoBanner').classList.remove('v');
     const depth=getDepth();
+    const holdersPct=getHoldersPct();
     try{
       const r=await API.scanToken({
-        ticker,contractAddress:contract,chain:ch,maxPages:depth,
+        ticker,contractAddress:contract,chain:ch,maxPages:depth,holdersPct,
         onStep:m=>{$('ltxt').textContent=m;},
         onProgress:(pct,sub)=>{
           $('prog').classList.add('v');
@@ -1470,6 +1509,12 @@ const App=(()=>{
           $('psub').textContent=sub;
         },
         onWalletDone:(w,i,tot)=>{
+          // update hint with real total
+          _totalHolders=tot;
+          const pct=getHoldersPct();
+          const n=Math.max(1,Math.round(tot*pct/100));
+          const hint=$('holdersHint');
+          if(hint)hint.textContent=`≈ top ${n} of ${tot} holders  ·  All = scan every holder`;
           $('ltxt').textContent=`Scanned ${i+1}/${tot}`;
           $('lsub').textContent=`${API.short(w.address)} · ${w.allTxCount} txs (all tokens) · ${w.cpList?.length||0} unique counterparties`;
         }
